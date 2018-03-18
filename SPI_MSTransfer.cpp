@@ -817,6 +817,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0003: {
                       Serial3.begin((uint32_t)data[4] << 16 | data[5]); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       Serial4.begin((uint32_t)data[4] << 16 | data[5]); break;
                     }
@@ -826,6 +827,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0006: {
                       Serial6.begin((uint32_t)data[4] << 16 | data[5]); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0, buf_pos = 0, buf[] = { 0xAA55, 3, 0xAA56 };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -851,6 +853,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0003: {
                       _read = Serial3.read(); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       _read = Serial4.read(); break;
                     }
@@ -860,6 +863,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0006: {
                       _read = Serial6.read(); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _read, checksum ^= _read };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -885,6 +889,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0003: {
                       _available = Serial3.available(); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       _available = Serial4.available(); break;
                     }
@@ -894,6 +899,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0006: {
                       _available = Serial6.available(); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _available, checksum ^= _available };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -919,6 +925,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0003: {
                       _peek = Serial3.peek(); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       _peek = Serial4.peek(); break;
                     }
@@ -928,6 +935,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0006: {
                       _peek = Serial6.peek(); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _peek, checksum ^= _peek };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -954,6 +962,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0003: {
                       _written = Serial3.write(_buf, data[4]); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       _written = Serial4.write(_buf, data[4]); break;
                     }
@@ -963,6 +972,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0006: {
                       _written = Serial6.write(_buf, data[4]); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _written, checksum ^= _written };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -987,6 +997,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0003: {
                       Serial3.flush(); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       Serial4.flush(); break;
                     }
@@ -996,6 +1007,7 @@ FASTRUN void spi0_isr(void) {
                   case 0x0006: {
                       Serial6.flush(); break;
                     }
+#endif
                 }
                 uint16_t buf_pos = 0, buf[] = { 0xAA55, 3, 0xAA56 };
                 while ( !(GPIOD_PDIR & 0x01) ) {
