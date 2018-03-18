@@ -537,10 +537,110 @@ uint32_t SPI_MSTransfer::crc() {
     SPI_deassert(); return -1;
   }
 }
-
-
-
-
+void SPI_MSTransfer::setTX(uint8_t pin, bool opendrain) {
+  if ( _slave_access ) return;
+  if ( _serial_port_identifier != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x3235; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0006; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = _serial_port_identifier; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = ((uint16_t)(pin << 8) | opendrain); checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) spi_port->transfer16(data[i]);
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
+}
+void SPI_MSTransfer::setRX(uint8_t pin) {
+  if ( _slave_access ) return;
+  if ( _serial_port_identifier != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x3235; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0007; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = _serial_port_identifier; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = pin; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) spi_port->transfer16(data[i]);
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
+}
+bool SPI_MSTransfer::attachRts(uint8_t pin) {
+  if ( _slave_access ) return 0;
+  if ( _serial_port_identifier != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x3235; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0008; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = _serial_port_identifier; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = pin; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) spi_port->transfer16(data[i]);
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return 0;
+  }
+}
+bool SPI_MSTransfer::attachCts(uint8_t pin) {
+  if ( _slave_access ) return 0;
+  if ( _serial_port_identifier != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x3235; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0009; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = _serial_port_identifier; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = pin; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) spi_port->transfer16(data[i]);
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return 0;
+  }
+}
 
 
 
@@ -766,11 +866,13 @@ void spi0_isr(void) {
 
     /* F&F BLOCK START */
     if ( data[0] == 0x9244 ) {
-      _slave_pointer->SPI_MSTransfer::mtsca.push_back(data,len);
+      _slave_pointer->SPI_MSTransfer::mtsca.push_back(data, len);
       while ( !(GPIOD_PDIR & 0x01) ) { // wait here until MASTER confirms F&F receipt
         if ( SPI0_SR & 0xF0 ) {
           SPI0_PUSHR_SLAVE = 0xBABE;
-          if ( SPI0_POPR == 0xD0D0 ) { SPI0_SR |= SPI_SR_RFDF; return; }
+          if ( SPI0_POPR == 0xD0D0 ) {
+            SPI0_SR |= SPI_SR_RFDF; return;
+          }
         }
       }
       SPI0_SR |= SPI_SR_RFDF; return;
@@ -876,7 +978,7 @@ void spi0_isr(void) {
       case 0x9243: { // MASTER SENDS PACKET TO SLAVE QUEUE WITH CRC ACKNOWLEDGEMENT
           switch ( data[2] ) {
             case 0x0000: {
-                _slave_pointer->SPI_MSTransfer::mtsca.push_back(data,len);
+                _slave_pointer->SPI_MSTransfer::mtsca.push_back(data, len);
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, data[4], checksum ^= data[4] };
                 while ( !(GPIOD_PDIR & 0x01) ) {
                   if ( SPI0_SR & 0xF0 ) {
@@ -1136,6 +1238,145 @@ void spi0_isr(void) {
                 }
                 SPI0_SR |= SPI_SR_RFDF; return;
               }
+            case 0x0006: {
+                switch ( data[3] ) {
+                  case 0x0001: {
+                      Serial1.setTX(data[4] >> 8, data[4]); break;
+                    }
+                  case 0x0002: {
+                      Serial2.setTX(data[4] >> 8, data[4]); break;
+                    }
+                  case 0x0003: {
+                      Serial3.setTX(data[4] >> 8, data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0004: {
+                      Serial4.setTX(data[4] >> 8, data[4]); break;
+                    }
+                  case 0x0005: {
+                      Serial5.setTX(data[4] >> 8, data[4]); break;
+                    }
+                  case 0x0006: {
+                      Serial6.setTX(data[4] >> 8, data[4]); break;
+                    }
+#endif
+                }
+                uint16_t buf_pos = 0, buf[] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0007: {
+                switch ( data[3] ) {
+                  case 0x0001: {
+                      Serial1.setRX(data[4]); break;
+                    }
+                  case 0x0002: {
+                      Serial2.setRX(data[4]); break;
+                    }
+                  case 0x0003: {
+                      Serial3.setRX(data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0004: {
+                      Serial4.setRX(data[4]); break;
+                    }
+                  case 0x0005: {
+                      Serial5.setRX(data[4]); break;
+                    }
+                  case 0x0006: {
+                      Serial6.setRX(data[4]); break;
+                    }
+#endif
+                }
+                uint16_t buf_pos = 0, buf[] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0008: {
+                bool value = 0;
+                switch ( data[3] ) {
+                  case 0x0001: {
+                      value = Serial1.attachRts(data[4]); break;
+                    }
+                  case 0x0002: {
+                      value = Serial2.attachRts(data[4]); break;
+                    }
+                  case 0x0003: {
+                      value = Serial3.attachRts(data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0004: {
+                      value = Serial4.attachRts(data[4]); break;
+                    }
+                  case 0x0005: {
+                      value = Serial5.attachRts(data[4]); break;
+                    }
+                  case 0x0006: {
+                      value = Serial6.attachRts(data[4]); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0, buf_pos = 0, buf[] = { 0xAA55, 4, value, checksum };
+                for ( uint16_t i = 0; i < buf[1] - 1; i++ ) checksum ^= buf[i];
+                buf[buf[1] - 1] = checksum;
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0009: {
+                bool value = 0;
+                switch ( data[3] ) {
+                  case 0x0001: {
+                      value = Serial1.attachCts(data[4]); break;
+                    }
+                  case 0x0002: {
+                      value = Serial2.attachCts(data[4]); break;
+                    }
+                  case 0x0003: {
+                      value = Serial3.attachCts(data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0004: {
+                      value = Serial4.attachCts(data[4]); break;
+                    }
+                  case 0x0005: {
+                      value = Serial5.attachCts(data[4]); break;
+                    }
+                  case 0x0006: {
+                      value = Serial6.attachCts(data[4]); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0, buf_pos = 0, buf[] = { 0xAA55, 4, value, checksum };
+                for ( uint16_t i = 0; i < buf[1] - 1; i++ ) checksum ^= buf[i];
+                buf[buf[1] - 1] = checksum;
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+
+
+
+
+
           }
           SPI0_SR |= SPI_SR_RFDF; return;
         } // END OF UART SECTION
@@ -1163,7 +1404,10 @@ void spi0_isr(void) {
                 while ( !(GPIOD_PDIR & 0x01) ) {
                   if ( SPI0_SR & 0xF0 ) {
                     SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
-                    if ( SPI0_POPR == 0xD0D0 ) { EEPROM.write(data[3],data[4]); break; }
+                    if ( SPI0_POPR == 0xD0D0 ) {
+                      EEPROM.write(data[3], data[4]);
+                      break;
+                    }
                   }
                 }
                 SPI0_SR |= SPI_SR_RFDF; return;
@@ -1173,7 +1417,10 @@ void spi0_isr(void) {
                 while ( !(GPIOD_PDIR & 0x01) ) {
                   if ( SPI0_SR & 0xF0 ) {
                     SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
-                    if ( SPI0_POPR == 0xD0D0 ) { EEPROM.update(data[3],data[4]); break; }
+                    if ( SPI0_POPR == 0xD0D0 ) {
+                      EEPROM.update(data[3], data[4]);
+                      break;
+                    }
                   }
                 }
                 SPI0_SR |= SPI_SR_RFDF; return;
@@ -1237,7 +1484,6 @@ void spi0_isr(void) {
   }
   SPI0_SR |= SPI_SR_RFDF; return;
 }
-
 
 
 
