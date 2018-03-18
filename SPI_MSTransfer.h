@@ -5,9 +5,8 @@
 #include <SPI.h>
 //#include <i2c_t3.h>
 //#include <FastLED.h>
-#include <deque>
-#include <queue>
-#include "TeensyThreads.h"
+#include "circular_buffer.h"
+
 
 #define DATA_BUFFER_MAX 1024
 #define _transfer_slowdown 0
@@ -46,10 +45,6 @@ class SPI_MSTransfer : public Stream {
     virtual void            flush();
     virtual void            debug(Stream &serial);
     virtual void            watchdog(uint32_t value);
-    static                  std::deque<std::vector<uint16_t>> teensy_handler_queue;
-    static                  std::deque<std::vector<uint16_t>> teensy_stm_queue;
-    static                  std::deque<std::vector<uint16_t>> teensy_master_queue;
-    static                  std::mutex _slave_cb_mutex;
     virtual void            begin();
     virtual void            _detect();
 
@@ -77,6 +72,9 @@ class SPI_MSTransfer : public Stream {
     virtual void      software_reset();
     virtual bool      online();
     Stream*                 debugSerial;
+    static            Circular_Buffer<uint16_t, 64, 250> mtsca;
+    static            Circular_Buffer<uint16_t, 64, 250> stmca;
+
   private:
     SPIClass                *spi_port;
     static                  _slave_handler_ptr _slave_handler; 
@@ -92,7 +90,6 @@ class SPI_MSTransfer : public Stream {
     volatile bool           _master_access = 0;
     volatile uint32_t       _spi_bus_speed;
     volatile uint8_t        chip_select = -1;
-
 
 
 
