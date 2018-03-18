@@ -49,6 +49,10 @@ class SPI_MSTransfer : public Stream {
     virtual bool            attachRts(uint8_t pin);
     virtual bool            attachCts(uint8_t pin);
     virtual void            debug(Stream &serial);
+    virtual void            analogReadResolution(unsigned int bits);
+    virtual uint32_t        analogWriteResolution(uint32_t bits);
+    virtual int             analogRead(uint8_t pin);
+    virtual void            analogWrite(uint8_t pin, int val);
     virtual void            watchdog(uint32_t value);
     virtual void            _detect();
     static                  Circular_Buffer<uint16_t, 64, 250> mtsca;
@@ -63,6 +67,9 @@ class SPI_MSTransfer : public Stream {
     Stream*                 debugSerial;
 
 
+
+
+
 //  below here future implementation
     virtual void      beginTransaction(uint32_t baudrate, uint8_t msblsb, uint8_t dataMode); // SPI
     virtual void      endTransaction(); // SPI 
@@ -71,10 +78,6 @@ class SPI_MSTransfer : public Stream {
     virtual void      requestFrom(uint8_t address, uint8_t bytes); // I2C
     virtual uint8_t   transfer(uint8_t data); // SPI 8bit
     virtual uint16_t  transfer16(uint16_t data); // SPI 16bit
-    virtual uint16_t  analogRead(uint8_t pin); // 16bit
-    virtual void      analogReadResolution(uint8_t value);
-    virtual void      analogWrite(uint8_t pin, uint16_t value); // 16bit
-    virtual void      analogWriteResolution(uint8_t value);
     //virtual void      show(uint8_t pin, CRGB *array, uint16_t array_length); // Fastled
     virtual void      software_reset();
     virtual bool      online();
