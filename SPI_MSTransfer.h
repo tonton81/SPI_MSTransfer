@@ -44,6 +44,10 @@ class SPI_MSTransfer : public Stream {
     virtual size_t          write(const char *buffer, size_t size) { return write((const uint8_t *)buffer, size); }
     virtual size_t          write(const uint8_t *buf, size_t size);
     virtual void            flush();
+    virtual void            setTX(uint8_t pin, bool opendrain=false);
+    virtual void            setRX(uint8_t pin);
+    virtual bool            attachRts(uint8_t pin);
+    virtual bool            attachCts(uint8_t pin);
     virtual void            debug(Stream &serial);
     virtual void            watchdog(uint32_t value);
     virtual void            _detect();
