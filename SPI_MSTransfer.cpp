@@ -641,109 +641,140 @@ bool SPI_MSTransfer::attachCts(uint8_t pin) {
     SPI_deassert(); return 0;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-uint16_t SPI_MSTransfer::analogRead(uint8_t pin) {
+void SPI_MSTransfer::analogReadResolution(unsigned int bits) {
+  if ( _slave_access ) return;
+  if ( _master_access ) {
+    uint16_t data[5], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x7429; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0000; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = bits; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) spi_port->transfer16(data[i]);
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
 }
-void SPI_MSTransfer::analogWrite(uint8_t pin, uint16_t value) {
+int SPI_MSTransfer::analogRead(uint8_t pin) {
+  if ( _slave_access ) return 0;
+  if ( _serial_port_identifier != -1 ) {
+    uint16_t data[5], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x7429; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0001; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = pin; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) spi_port->transfer16(data[i]);
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return (int)buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return 0;
+  }
 }
-void SPI_MSTransfer::analogReadResolution(uint8_t value) {
+uint32_t SPI_MSTransfer::analogWriteResolution(uint32_t bits) {
+  if ( _slave_access ) return 0;
+  if ( _serial_port_identifier != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x7429; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0002; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = bits >> 16; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = bits; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return ((uint32_t)buf[2] << 16 | buf[3]);
+        }
+      }
+    }
+    SPI_deassert(); return 0;
+  }
 }
-void SPI_MSTransfer::analogWriteResolution(uint8_t value) {
+void SPI_MSTransfer::analogWrite(uint8_t pin, int val) {
+  if ( _slave_access ) return;
+  if ( _serial_port_identifier != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x7429; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0003; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = pin; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = val; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 void SPI_MSTransfer::beginTransmission(uint8_t addr) {
 }
 void SPI_MSTransfer::endTransmission() {
@@ -1460,18 +1491,65 @@ void spi0_isr(void) {
                 }
                 SPI0_SR |= SPI_SR_RFDF; return;
               }
-
-
-
-
           }
           SPI0_SR |= SPI_SR_RFDF; return;
         } // END OF EEPROM SECTION
 
 
+      case 0x7429: { // ANALOG SECTION
+          switch ( data[2] ) {
+            case 0x0000: {
+                analogReadResolution(data[3]);
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0001: {
+                uint16_t val = analogRead(data[3]);
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, val, checksum ^= val };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0002: {
+                uint32_t val = analogWriteResolution((uint32_t)data[3] << 16 | data[4]);
+                uint16_t checksum = 0, buf_pos = 0, buf[] = { 0xAA55, 5, val >> 16, val, checksum };
+                for ( uint16_t i = 0; i < buf[1] - 1; i++ ) checksum ^= buf[i];
+                buf[buf[1] - 1] = checksum;
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0003: {
+                analogWrite(data[3],data[4]);
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
 
 
 
+          }
+          SPI0_SR |= SPI_SR_RFDF; return;
+        } // END OF ANALOG SECTION
 
 
 
