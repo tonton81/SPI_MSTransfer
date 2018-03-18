@@ -1,8 +1,9 @@
 #include <SPI_MSTransfer.h>
 #include "Stream.h"
 #include <SPI.h>
-//#include <i2c_t3.h>
 #include "circular_buffer.h"
+#include <i2c_t3.h>
+#include <EEPROM.h>
 
 SPI_MSTransfer *_slave_pointer;
 _slave_handler_ptr SPI_MSTransfer::_slave_handler = nullptr;
@@ -24,13 +25,14 @@ SPI_MSTransfer::SPI_MSTransfer(const char *data, uint8_t cs, SPIClass *SPIWire, 
   ::pinMode(cs, OUTPUT); // make sure CS is OUTPUT before deassertion.
   ::digitalWriteFast(cs, HIGH); // deassert the CS way before SPI initializes :)
   debugSerial = nullptr;
-  if ( !strcmp(data, "Serial") ) { _serial_port_identifier = 0; }
+  if ( !strcmp(data, "Serial")       ) { _serial_port_identifier = 0; }
   else if ( !strcmp(data, "Serial1") ) { _serial_port_identifier = 1; }
   else if ( !strcmp(data, "Serial2") ) { _serial_port_identifier = 2; }
   else if ( !strcmp(data, "Serial3") ) { _serial_port_identifier = 3; }
   else if ( !strcmp(data, "Serial4") ) { _serial_port_identifier = 4; }
   else if ( !strcmp(data, "Serial5") ) { _serial_port_identifier = 5; }
   else if ( !strcmp(data, "Serial6") ) { _serial_port_identifier = 6; }
+  else if ( !strcmp(data, "EEPROM")  ) { eeprom_support = 1;          }
 
 
 
@@ -43,7 +45,6 @@ SPI_MSTransfer::SPI_MSTransfer(const char *data, uint8_t cs, SPIClass *SPIWire, 
   else if ( !strcmp(data, "Wire3") ) { wire_port = 3; }
   else if ( !strcmp(data, "SPI1") ) { remote_spi_port = 1; }
   else if ( !strcmp(data, "SPI2") ) { remote_spi_port = 2; }
-  else if ( !strcmp(data, "EEPROM") ) { eeprom_support = 1; }
   else if ( !strcmp(data, "SERVO") ) { servo_support = 1; }
   else if ( !strcmp(data, "FASTLED" ) ) { fastled_support = 1; }
 }
@@ -102,7 +103,7 @@ void SPI_MSTransfer::digitalWrite(uint8_t pin, bool state) {
   SPI_assert();
   for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
   if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
-  for ( uint8_t i = 0; i < 100; i++ ) {
+  for ( uint16_t i = 0; i < 3000; i++ ) {
     if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
       uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
       for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -126,7 +127,7 @@ bool SPI_MSTransfer::digitalRead(uint8_t pin) {
   SPI_assert();
   for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
   if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
-  for ( uint8_t i = 0; i < 100; i++ ) {
+  for ( uint16_t i = 0; i < 3000; i++ ) {
     if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
       uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
       for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -149,7 +150,7 @@ void SPI_MSTransfer::pinMode(uint8_t pin, uint8_t state) {
   SPI_assert();
   for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
   if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
-  for ( uint8_t i = 0; i < 100; i++ ) {
+  for ( uint16_t i = 0; i < 3000; i++ ) {
     if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
       uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
       for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -161,7 +162,7 @@ void SPI_MSTransfer::pinMode(uint8_t pin, uint8_t state) {
   }
   SPI_deassert(); return;
 }
-void SPI_MSTransfer::pinToggle(uint8_t pin) {
+void SPI_MSTransfer::pinToggle(uint8_t pin) { // code written by defragster
   if ( _slave_access ) return;
   uint16_t data[5], checksum = 0, data_pos = 0;
   data[data_pos] = 0x9766; checksum ^= data[data_pos]; data_pos++; // HEADER
@@ -172,7 +173,7 @@ void SPI_MSTransfer::pinToggle(uint8_t pin) {
   SPI_assert();
   for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
   if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
-  for ( uint8_t i = 0; i < 100; i++ ) {
+  for ( uint16_t i = 0; i < 3000; i++ ) {
     if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
       uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
       for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -220,7 +221,7 @@ uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t 
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
     if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -248,7 +249,7 @@ void SPI_MSTransfer::begin(uint32_t baudrate) { // set remote serial port and ba
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
     if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -273,7 +274,7 @@ int SPI_MSTransfer::read(void) {
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
     if ( !command_ack_response(data, sizeof(data) / 2) ) return -1; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -298,7 +299,7 @@ int SPI_MSTransfer::peek() {
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
     if ( !command_ack_response(data, sizeof(data) / 2) ) return -1; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -323,7 +324,7 @@ int SPI_MSTransfer::available(void) {
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
     if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -350,7 +351,7 @@ size_t SPI_MSTransfer::write(const uint8_t *buf, size_t size) {
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
     if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -375,7 +376,7 @@ void SPI_MSTransfer::flush() {
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) spi_port->transfer16(data[i]);
     if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -389,9 +390,11 @@ void SPI_MSTransfer::flush() {
   }
 }
 size_t SPI_MSTransfer::print(const char *p) {
+  if ( _slave_access ) return -1;
   write(p, strlen(p));
 }
 size_t SPI_MSTransfer::println(const char *p) {
+  if ( _slave_access ) return -1;
   char _text[strlen(p) + 1]; for ( uint16_t i = 0; i < strlen(p); i++ ) _text[i] = p[i]; _text[sizeof(_text) - 1] = '\n'; write(_text, sizeof(_text));
 }
 void SPI_MSTransfer::begin() {
@@ -407,6 +410,131 @@ void SPI_MSTransfer::begin() {
     SPI0_MCR &= ~SPI_MCR_HALT & ~SPI_MCR_MDIS; // start
     NVIC_SET_PRIORITY(IRQ_SPI0, 0); // set priority
     NVIC_ENABLE_IRQ(IRQ_SPI0); // enable CS IRQ
+  }
+}
+int SPI_MSTransfer::read(int addr) {
+  if ( _slave_access ) return -1;
+  if ( eeprom_support != -1 ) {
+    uint16_t data[5], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x67BB; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0000; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = addr; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return -1; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return (int16_t)buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return -1;
+  }
+}
+void SPI_MSTransfer::write(int addr, uint8_t value) {
+  if ( _slave_access ) return;
+  if ( eeprom_support != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x67BB; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0001; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = addr; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = value; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); Serial.println("Complete!"); // send confirmation
+          SPI_deassert();
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
+}
+void SPI_MSTransfer::update(int addr, uint8_t value) {
+  if ( _slave_access ) return;
+  if ( eeprom_support != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x67BB; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0002; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = addr; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = value; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); Serial.println("Complete!"); // send confirmation
+          SPI_deassert();
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
+}
+uint16_t SPI_MSTransfer::length() {
+  if ( _slave_access ) return -1;
+  if ( eeprom_support != -1 ) {
+    uint16_t data[4], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x67BB; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0003; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return -1; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return -1;
+  }
+}
+uint32_t SPI_MSTransfer::crc() {
+  if ( _slave_access ) return -1;
+  if ( eeprom_support != -1 ) {
+    uint16_t data[4], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x67BB; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0004; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return -1; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return ((uint32_t)buf[2] << 16 | buf[3]);
+        }
+      }
+    }
+    SPI_deassert(); return -1;
   }
 }
 
@@ -536,16 +664,6 @@ void SPI_MSTransfer::beginTransaction(uint32_t baudrate, uint8_t msblsb, uint8_t
 }
 void SPI_MSTransfer::endTransaction() { // end remote SPI transaction
 }
-int SPI_MSTransfer::read(int addr) {
-}
-uint16_t SPI_MSTransfer::length() {
-}
-size_t SPI_MSTransfer::write(int addr, uint8_t data) {
-}
-void SPI_MSTransfer::update(int addr, uint8_t data) {
-}
-uint32_t SPI_MSTransfer::crc() {
-}
 //void SPI_MSTransfer::show(uint8_t pin, CRGB *array, uint16_t array_length) { // update Fastled pixels
 //}
 
@@ -632,7 +750,7 @@ SPI_MSTransfer::SPI_MSTransfer(const char *data, const char *mode) {
   }
 }
 
-FASTRUN void spi0_isr(void) {
+void spi0_isr(void) {
   static uint16_t data[DATA_BUFFER_MAX];
   uint16_t buffer_pos = 0, len = 0, process_crc = 0;
   while ( !(GPIOD_PDIR & 0x01) ) {
@@ -739,7 +857,7 @@ FASTRUN void spi0_isr(void) {
                 }
                 SPI0_SR |= SPI_SR_RFDF; return;
               }
-            case 0x0003: { // SLAVE PIN TOGGLE
+            case 0x0003: { // SLAVE PIN TOGGLE, code written by defragster
                 uint16_t tPin = data[3];
                 if ( LED_BUILTIN == tPin ) GPIOC_PTOR = 32;
                 else digitalWrite(tPin, !digitalRead(tPin) );
@@ -1018,24 +1136,91 @@ FASTRUN void spi0_isr(void) {
                 }
                 SPI0_SR |= SPI_SR_RFDF; return;
               }
+          }
+          SPI0_SR |= SPI_SR_RFDF; return;
+        } // END OF UART SECTION
 
 
 
 
 
 
-
-
-
-
-
+      case 0x67BB: { // EEPROM SECTION
+          switch ( data[2] ) {
+            case 0x0000: {
+                uint16_t val = EEPROM.read(data[3]);
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, val, checksum ^= val };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0001: {
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) { EEPROM.write(data[3],data[4]); break; }
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0002: {
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) { EEPROM.update(data[3],data[4]); break; }
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0003: {
+                uint16_t val = EEPROM.length();
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, val, checksum ^= val };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0004: { // CRC code Written by Christopher Andrews.
+                const unsigned long crc_table[16] = {
+                  0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
+                  0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+                  0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
+                  0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
+                };
+                unsigned long crc = ~0L;
+                for (int index = 0 ; index < EEPROM.length()  ; ++index) {
+                  crc = crc_table[(crc ^ EEPROM[index]) & 0x0f] ^ (crc >> 4);
+                  crc = crc_table[(crc ^ (EEPROM[index] >> 4)) & 0x0f] ^ (crc >> 4);
+                  crc = ~crc;
+                }
+                uint16_t checksum = 0, buf_pos = 0, buf[] = { 0xAA55, 5, crc >> 16, crc, checksum };
+                for ( uint16_t i = 0; i < buf[1] - 1; i++ ) checksum ^= buf[i];
+                buf[buf[1] - 1] = checksum;
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
 
 
 
 
           }
           SPI0_SR |= SPI_SR_RFDF; return;
-        }
+        } // END OF EEPROM SECTION
+
 
 
 
@@ -1105,7 +1290,7 @@ void SPI_MSTransfer::_detect() {
     data[data_pos] = checksum;
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
     if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
@@ -1120,7 +1305,7 @@ void SPI_MSTransfer::_detect() {
 
 
 
-FASTRUN uint16_t SPI_MSTransfer::events() {
+uint16_t SPI_MSTransfer::events() {
   if ( _master_access ) {
     uint16_t data[4], checksum = 0, data_pos = 0;
     data[data_pos] = 0x9712; checksum ^= data[data_pos]; data_pos++; // HEADER
@@ -1130,7 +1315,7 @@ FASTRUN uint16_t SPI_MSTransfer::events() {
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
     if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
-    for ( uint8_t i = 0; i < 100; i++ ) {
+    for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
