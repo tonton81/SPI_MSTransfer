@@ -5,10 +5,24 @@ Circular_Buffer<uint16_t, 4> cb2;
 Circular_Buffer<uint32_t, 16> cb3;
 Circular_Buffer<uint16_t, 16> cb4;
 
+Circular_Buffer<uint32_t, 32, 250> print_test;
+
+
+
+
 void setup() {
   Serial.begin(1);
   delay(2000);
   Serial.println("----------------------");
+  print_test.print("Hello World");
+  print_test.print("  ");
+  print_test.println("Teensy here!");
+  while ( print_test.size() > 0 ) {
+    Serial.print((char)print_test.read());
+  } Serial.println("OK");
+
+
+  //  return;
 
   uint16_t testBuf[100];
   for ( uint16_t i = 0; i < 100; i++ ) testBuf[i] = i;
@@ -114,7 +128,32 @@ void setup() {
 
 }
 
+uint16_t buffer_arrays[32][250];
+Circular_Buffer<uint16_t, 16> cb_ba;
+Circular_Buffer<uint16_t, 32, 250> ca;
+
 void loop() {
+  static uint32_t timer = millis() - 3000;
+  if ( millis() - timer > 2000 ) {
+    timer = millis();
 
 
+    for ( uint16_t i = 0; i < 35; i++ ) {
+      static uint16_t val = 0;
+      uint16_t Buf[20];
+      for ( uint16_t i = 0; i < 20; i++ ) Buf[i] = i + val;
+      ca.write(Buf, 20);
+      val += 20;
+    }
+
+    while ( ca.size() > 0 ) {
+      for ( uint16_t i = 0; i < 20; i++ ) {
+        Serial.print(ca.front()[i]); Serial.print(" ");
+      } Serial.println();
+      ca.pop_front();
+    }
+while(1);
+
+
+  }
 }

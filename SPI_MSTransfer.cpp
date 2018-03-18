@@ -2,21 +2,17 @@
 #include "Stream.h"
 #include <SPI.h>
 //#include <i2c_t3.h>
-#include <deque>
-#include <queue>
-#include "TeensyThreads.h"
-
+#include "circular_buffer.h"
 
 SPI_MSTransfer *_slave_pointer;
-std::mutex SPI_MSTransfer::_slave_cb_mutex; // slave callback mutex
-std::deque<std::vector<uint16_t>> SPI_MSTransfer::teensy_handler_queue; // slave callback queue
-std::deque<std::vector<uint16_t>> SPI_MSTransfer::teensy_stm_queue; // slave queue that the master cherry picks from
-std::deque<std::vector<uint16_t>> SPI_MSTransfer::teensy_master_queue; // dormant state, possibly removed if unused.
 _slave_handler_ptr SPI_MSTransfer::_slave_handler = nullptr;
 _master_handler_ptr SPI_MSTransfer::_master_handler = nullptr;
 bool SPI_MSTransfer::watchdogEnabled = 0;
 uint32_t SPI_MSTransfer::watchdogFeedInterval = millis();
 uint32_t SPI_MSTransfer::watchdogTimeout = 0;
+Circular_Buffer<uint16_t, 64, 250> SPI_MSTransfer::mtsca;
+Circular_Buffer<uint16_t, 64, 250> SPI_MSTransfer::stmca;
+
 
 void SPI_MSTransfer::onTransfer(_slave_handler_ptr handler) {
   if ( _master_access ) _master_handler = handler;
@@ -198,8 +194,7 @@ uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t 
     data[data_pos] = packetID; checksum ^= data[data_pos]; data_pos++;
     for ( uint16_t i = 0; i < length; i++ ) { data[data_pos] = buffer[i]; checksum ^= data[data_pos]; data_pos++; }
     data[data_pos] = checksum;
-    std::vector<uint16_t> _vector(data, data + data[1]); teensy_stm_queue.push_back(_vector);
-    if ( teensy_stm_queue.size() > 14 ) teensy_stm_queue.pop_front();
+    stmca.push_back(data,data[1]);
     return packetID;
   }
   if ( _master_access ) {
@@ -637,7 +632,7 @@ SPI_MSTransfer::SPI_MSTransfer(const char *data, const char *mode) {
   }
 }
 
-void spi0_isr(void) {
+FASTRUN void spi0_isr(void) {
   static uint16_t data[DATA_BUFFER_MAX];
   uint16_t buffer_pos = 0, len = 0, process_crc = 0;
   while ( !(GPIOD_PDIR & 0x01) ) {
@@ -653,8 +648,7 @@ void spi0_isr(void) {
 
     /* F&F BLOCK START */
     if ( data[0] == 0x9244 ) {
-      std::vector<uint16_t> _vector(data, data + data[1]);
-      _slave_pointer->SPI_MSTransfer::teensy_handler_queue.push_back(_vector);
+      _slave_pointer->SPI_MSTransfer::mtsca.push_back(data,len);
       while ( !(GPIOD_PDIR & 0x01) ) { // wait here until MASTER confirms F&F receipt
         if ( SPI0_SR & 0xF0 ) {
           SPI0_PUSHR_SLAVE = 0xBABE;
@@ -764,7 +758,7 @@ void spi0_isr(void) {
       case 0x9243: { // MASTER SENDS PACKET TO SLAVE QUEUE WITH CRC ACKNOWLEDGEMENT
           switch ( data[2] ) {
             case 0x0000: {
-                std::vector<uint16_t> _vector(data, data + data[1]); SPI_MSTransfer::teensy_handler_queue.push_back(_vector);
+                _slave_pointer->SPI_MSTransfer::mtsca.push_back(data,len);
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, data[4], checksum ^= data[4] };
                 while ( !(GPIOD_PDIR & 0x01) ) {
                   if ( SPI0_SR & 0xF0 ) {
@@ -780,14 +774,15 @@ void spi0_isr(void) {
       case 0x9712: {
           switch ( data[2] ) {
             case 0x0000: {
-                if ( _slave_pointer->SPI_MSTransfer::teensy_stm_queue.size() > 0 ) { // IF QUEUES EXIST, ONE WILL BE DEQUEUED TO MASTER
-                  uint16_t checksum = 0, _deque_pos = 0;
-                  auto _deque = move(_slave_pointer->SPI_MSTransfer::teensy_stm_queue.front());
-                  _slave_pointer->SPI_MSTransfer::teensy_stm_queue.pop_front();
+                if ( _slave_pointer->SPI_MSTransfer::stmca.size() > 0 ) { // IF QUEUES EXIST, ONE WILL BE DEQUEUED TO MASTER
+                  uint16_t checksum = 0, buf_pos = 0;
                   while ( !(GPIOD_PDIR & 0x01) ) {
                     if ( SPI0_SR & 0xF0 ) {
-                      SPI0_PUSHR_SLAVE = _deque[ ( _deque_pos > _deque[1] ) ? _deque_pos = 0 : _deque_pos++];
-                      if ( SPI0_POPR == 0xD0D0 ) break;
+                      SPI0_PUSHR_SLAVE = _slave_pointer->SPI_MSTransfer::stmca.front()[ ( buf_pos > _slave_pointer->SPI_MSTransfer::stmca.front()[1] ) ? buf_pos = 0 : buf_pos++];
+                      if ( SPI0_POPR == 0xD0D0 ) {
+                        _slave_pointer->SPI_MSTransfer::stmca.pop_front();
+                        break;
+                      }
                     }
                   }
                   SPI0_SR |= SPI_SR_RFDF; return;
@@ -822,6 +817,7 @@ void spi0_isr(void) {
                   case 0x0003: {
                       Serial3.begin((uint32_t)data[4] << 16 | data[5]); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       Serial4.begin((uint32_t)data[4] << 16 | data[5]); break;
                     }
@@ -831,6 +827,7 @@ void spi0_isr(void) {
                   case 0x0006: {
                       Serial6.begin((uint32_t)data[4] << 16 | data[5]); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0, buf_pos = 0, buf[] = { 0xAA55, 3, 0xAA56 };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -856,6 +853,7 @@ void spi0_isr(void) {
                   case 0x0003: {
                       _read = Serial3.read(); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       _read = Serial4.read(); break;
                     }
@@ -865,6 +863,7 @@ void spi0_isr(void) {
                   case 0x0006: {
                       _read = Serial6.read(); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _read, checksum ^= _read };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -890,6 +889,7 @@ void spi0_isr(void) {
                   case 0x0003: {
                       _available = Serial3.available(); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       _available = Serial4.available(); break;
                     }
@@ -899,6 +899,7 @@ void spi0_isr(void) {
                   case 0x0006: {
                       _available = Serial6.available(); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _available, checksum ^= _available };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -924,6 +925,7 @@ void spi0_isr(void) {
                   case 0x0003: {
                       _peek = Serial3.peek(); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       _peek = Serial4.peek(); break;
                     }
@@ -933,6 +935,7 @@ void spi0_isr(void) {
                   case 0x0006: {
                       _peek = Serial6.peek(); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _peek, checksum ^= _peek };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -959,6 +962,7 @@ void spi0_isr(void) {
                   case 0x0003: {
                       _written = Serial3.write(_buf, data[4]); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       _written = Serial4.write(_buf, data[4]); break;
                     }
@@ -968,6 +972,7 @@ void spi0_isr(void) {
                   case 0x0006: {
                       _written = Serial6.write(_buf, data[4]); break;
                     }
+#endif
                 }
                 uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _written, checksum ^= _written };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -992,6 +997,7 @@ void spi0_isr(void) {
                   case 0x0003: {
                       Serial3.flush(); break;
                     }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
                   case 0x0004: {
                       Serial4.flush(); break;
                     }
@@ -1001,6 +1007,7 @@ void spi0_isr(void) {
                   case 0x0006: {
                       Serial6.flush(); break;
                     }
+#endif
                 }
                 uint16_t buf_pos = 0, buf[] = { 0xAA55, 3, 0xAA56 };
                 while ( !(GPIOD_PDIR & 0x01) ) {
@@ -1113,7 +1120,7 @@ void SPI_MSTransfer::_detect() {
 
 
 
-uint16_t SPI_MSTransfer::events() {
+FASTRUN uint16_t SPI_MSTransfer::events() {
   if ( _master_access ) {
     uint16_t data[4], checksum = 0, data_pos = 0;
     data[data_pos] = 0x9712; checksum ^= data[data_pos]; data_pos++; // HEADER
@@ -1148,23 +1155,15 @@ uint16_t SPI_MSTransfer::events() {
       watchdogFeedInterval = millis();
       __disable_irq(); WDOG_REFRESH = 0xA602; WDOG_REFRESH = 0xB480; __enable_irq();
     }
-    if ( _slave_handler == nullptr ) {
-      if ( teensy_handler_queue.size() > 0 ) teensy_handler_queue.pop_front();
-      return 0;
-    }
-    if ( teensy_handler_queue.size() > 0 ) {
-      auto _deque = move(teensy_handler_queue.front());
-      teensy_handler_queue.pop_front();
-      uint16_t checksum = 0, _deque_pos = 0, _buf[_deque[3]];
-      for ( uint16_t i = 0; i < _deque[1] - 1; i++ ) checksum ^= _deque[i];
-      memmove (&_buf[0], &_deque[5], _deque[3] * 2 );
-      if ( _slave_handler != nullptr ) {
-        AsyncMST info;
-        if ( checksum != _deque[_deque[1] - 1] ) info.error = 1;
-        info.packetID = _deque[4];
-        _slave_handler(_buf, _deque[3], info);
-        return 0;
-      }
+    if ( mtsca.size() > 0 ) {
+      uint16_t checksum = 0, buf_pos = 0, len = mtsca.front()[3], buf[len]; AsyncMST info;
+      for ( uint16_t i = 0; i < mtsca.front()[1] - 1; i++ ) checksum ^= mtsca.front()[i];
+      ( checksum == mtsca.front()[mtsca.front()[1]-1] ) ? info.error = 0 : info.error = 1;
+      info.packetID = mtsca.front()[4];
+      len = mtsca.front()[3];
+      memmove (&buf[0], &mtsca.front()[5], mtsca.front()[3] * 2 );
+      mtsca.pop_front();
+      if ( _slave_handler != nullptr ) _slave_handler(buf, len, info);
     }
   }
   return 0;
