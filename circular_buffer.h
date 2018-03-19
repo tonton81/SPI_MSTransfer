@@ -29,10 +29,9 @@ class Circular_Buffer {
 
     protected:
     private:
-        uint16_t head = 0, tail = 0, _available = 0;
+        uint16_t head = 0, tail = 0, _available = 0, _array_pointer = 0;
         T _cbuf[_size];
         T _cabuf[_size][multi];
-        uint16_t _array_pointer = 0;
 };
 
 template<typename T, uint16_t _size, uint16_t multi>
@@ -108,9 +107,9 @@ void Circular_Buffer<T,_size,multi>::write(const T *buffer, uint16_t length) {
 
 template<typename T, uint16_t _size, uint16_t multi>
 T Circular_Buffer<T,_size,multi>::read() {
+  _available--;
   T value = _cbuf[head&(_size-1)];
   head = (head + 1)&(2*_size-1);
-  _available--;
   return value;
 }
 
@@ -132,7 +131,11 @@ T Circular_Buffer<T,_size,multi>::peekBytes(T *buffer, uint16_t length) {
 
 template<typename T, uint16_t _size, uint16_t multi>
 T Circular_Buffer<T,_size,multi>::readBytes(T *buffer, uint16_t length) {
-  if ( multi ) return 0;
+  if ( multi ) {
+    memmove(&buffer[0],&_cabuf[peek()],length*sizeof(T)); // update buffer
+    read(); // deque item
+    return 0;
+  }
   _available -= length;
   uint16_t _count;
   ( available() < length ) ? _count = available() : _count = length;
