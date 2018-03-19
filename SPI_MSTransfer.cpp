@@ -11,8 +11,8 @@ _master_handler_ptr SPI_MSTransfer::_master_handler = nullptr;
 bool SPI_MSTransfer::watchdogEnabled = 0;
 uint32_t SPI_MSTransfer::watchdogFeedInterval = millis();
 uint32_t SPI_MSTransfer::watchdogTimeout = 0;
-Circular_Buffer<uint16_t, 64, 250> SPI_MSTransfer::mtsca;
-Circular_Buffer<uint16_t, 64, 250> SPI_MSTransfer::stmca;
+Circular_Buffer<uint16_t, 32, 150> SPI_MSTransfer::mtsca;
+Circular_Buffer<uint16_t, 32, 150> SPI_MSTransfer::stmca;
 
 
 void SPI_MSTransfer::onTransfer(_slave_handler_ptr handler) {
@@ -408,7 +408,7 @@ void SPI_MSTransfer::begin() {
     CORE_PIN12_CONFIG = PORT_PCR_MUX(2);
     CORE_PIN2_CONFIG =  PORT_PCR_PS | PORT_PCR_MUX(2); // this uses pin 2 for the CS so Serial2 can be used instead.
     SPI0_MCR &= ~SPI_MCR_HALT & ~SPI_MCR_MDIS; // start
-    NVIC_SET_PRIORITY(IRQ_SPI0, 0); // set priority
+    NVIC_SET_PRIORITY(IRQ_SPI0, 31); // set priority
     NVIC_ENABLE_IRQ(IRQ_SPI0); // enable CS IRQ
   }
 }
@@ -1665,14 +1665,13 @@ uint16_t SPI_MSTransfer::events() {
       __disable_irq(); WDOG_REFRESH = 0xA602; WDOG_REFRESH = 0xB480; __enable_irq();
     }
     if ( mtsca.size() > 0 ) {
-      uint16_t checksum = 0, buf_pos = 0, len = mtsca.front()[3], buf[len]; AsyncMST info;
-      for ( uint16_t i = 0; i < mtsca.front()[1] - 1; i++ ) checksum ^= mtsca.front()[i];
-      ( checksum == mtsca.front()[mtsca.front()[1]-1] ) ? info.error = 0 : info.error = 1;
-      info.packetID = mtsca.front()[4];
-      len = mtsca.front()[3];
-      memmove (&buf[0], &mtsca.front()[5], mtsca.front()[3] * 2 );
-      mtsca.pop_front();
-      if ( _slave_handler != nullptr ) _slave_handler(buf, len, info);
+      uint16_t array[mtsca.front()[1]];
+      mtsca.pop_front(array,sizeof(array)/2 );
+      uint16_t checksum = 0, buf_pos = 0, buf[array[3]]; AsyncMST info; info.packetID = array[4];
+      for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
+      ( checksum == array[array[1]-1] ) ? info.error = 0 : info.error = 1;
+      memmove (&buf[0], &array[5], array[3] * 2 );
+      if ( _slave_handler != nullptr ) _slave_handler(buf, array[3], info);
     }
   }
   return 0;
