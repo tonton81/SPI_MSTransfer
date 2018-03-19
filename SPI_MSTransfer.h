@@ -8,7 +8,7 @@
 #include "circular_buffer.h"
 #include <EEPROM.h>
 
-#define DATA_BUFFER_MAX 1024
+#define DATA_BUFFER_MAX 150
 #define _transfer_slowdown 0
 
 struct AsyncMST {
@@ -55,8 +55,8 @@ class SPI_MSTransfer : public Stream {
     virtual void            analogWrite(uint8_t pin, int val);
     virtual void            watchdog(uint32_t value);
     virtual void            _detect();
-    static                  Circular_Buffer<uint16_t, 64, 250> mtsca;
-    static                  Circular_Buffer<uint16_t, 64, 250> stmca;
+    static                  Circular_Buffer<uint16_t, 32, 150> mtsca;
+    static                  Circular_Buffer<uint16_t, 32, 150> stmca;
     virtual size_t          print(const char *p);
     virtual size_t          println(const char *p);
     virtual int             read(int addr); // EEPROM
