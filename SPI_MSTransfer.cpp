@@ -408,7 +408,7 @@ void SPI_MSTransfer::begin() {
     CORE_PIN12_CONFIG = PORT_PCR_MUX(2);
     CORE_PIN2_CONFIG =  PORT_PCR_PS | PORT_PCR_MUX(2); // this uses pin 2 for the CS so Serial2 can be used instead.
     SPI0_MCR &= ~SPI_MCR_HALT & ~SPI_MCR_MDIS; // start
-    NVIC_SET_PRIORITY(IRQ_SPI0, 31); // set priority
+    NVIC_SET_PRIORITY(IRQ_SPI0, 0); // set priority
     NVIC_ENABLE_IRQ(IRQ_SPI0); // enable CS IRQ
   }
 }
@@ -1666,7 +1666,9 @@ uint16_t SPI_MSTransfer::events() {
     }
     if ( mtsca.size() > 0 ) {
       uint16_t array[mtsca.front()[1]];
+__disable_irq();
       mtsca.pop_front(array,sizeof(array)/2 );
+__enable_irq();
       uint16_t checksum = 0, buf_pos = 0, buf[array[3]]; AsyncMST info; info.packetID = array[4];
       for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
       ( checksum == array[array[1]-1] ) ? info.error = 0 : info.error = 1;
