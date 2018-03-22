@@ -13,7 +13,7 @@
 
 struct AsyncMST {
   uint16_t packetID = 0;
-  uint8_t error = 0, slave = -1;
+  uint8_t error = 0, slave = -1; // slave identification added by linarism
 };
 
 typedef void (*_slave_handler_ptr)(uint16_t* buffer, uint16_t length, AsyncMST info);
