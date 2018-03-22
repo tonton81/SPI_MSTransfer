@@ -1,22 +1,36 @@
 #include <SPI_MSTransfer.h>
-#include "A_ConfigDefines.h"
 
 SPI_MSTransfer slave = SPI_MSTransfer("SLAVE", "STANDALONE");
 
 
 void setup() {
 	Serial.begin(115200);
-	while (!Serial && micros() < 5000 )
-	{	Serial.print( "Teensy Online @ millis=" );
+	while (!Serial && millis() < 5000 )
+	{	Serial.print( "Teensy NOT Online @ millis=" );
 		Serial.println( millis() );
-		delay(10);
+		delay(30);
 	}
 	Serial.print( "Teensy Online @ millis=" );
 	Serial.println( millis() );
 	Serial.println("\n" __FILE__ " " __DATE__ " " __TIME__);
+
+	if ( ARM_DWT_CYCCNT == ARM_DWT_CYCCNT ) {
+		Serial.print( "Cycle Counter Not Enabled :" );
+		Serial.println( ARM_DWT_CYCCNT );
+	}
+	if ( ARM_DWT_CYCCNT == ARM_DWT_CYCCNT ) {
+		// Enable CPU Cycle Count
+		ARM_DEMCR |= ARM_DEMCR_TRCENA;
+		ARM_DWT_CTRL |= ARM_DWT_CTRL_CYCCNTENA;
+	}
+	if ( ARM_DWT_CYCCNT != ARM_DWT_CYCCNT ) {
+		Serial.print( "Cycle Counter Enabled! :" );
+		Serial.println( ARM_DWT_CYCCNT );
+	}
 	slave.begin( );
 	slave.onTransfer(myCallback);
 	//slave.debug(Serial); // SPI_MST Debug error tracking
+
 }
 void led() {
 	digitalWrite(13, !digitalRead(13));
@@ -26,7 +40,7 @@ void loop() {
 	slave.events();
 }
 
-static uint16_t last_packetID=0;
+static uint16_t last_packetID = 0;
 void myCallback(uint16_t *buffer, uint16_t length, AsyncMST info) {
 	if ( 55 == info.packetID ) {
 		if ( 48 != length ) {
@@ -114,7 +128,7 @@ void myCallback(uint16_t *buffer, uint16_t length, AsyncMST info) {
 				static uint32_t ChkErr = 0;
 				static uint32_t CBcount = 0;
 				if ( last_packetID != info.packetID ) {
-					LastVal+= 12;
+					LastVal += 12;
 					if ( LastVal > 65536 && LastVal < 100000 ) LastVal -= 65536;
 				}
 				elapsedMillis LastCB;
