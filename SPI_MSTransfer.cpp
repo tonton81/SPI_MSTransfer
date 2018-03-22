@@ -1647,7 +1647,7 @@ uint16_t SPI_MSTransfer::events() {
           if ( buf[1] > 4 ) {
             uint16_t _slave_array[buf[3]];
             memmove (&_slave_array[0], &buf[5], buf[3] * 2 );
-            AsyncMST info; info.packetID = buf[4];
+            AsyncMST info; info.packetID = buf[4]; info.slave = chip_select;
             _master_handler(_slave_array, buf[3], info);
             spi_port->transfer16(0xD0D0); // send confirmation
             SPI_deassert(); return 0x00A6;
@@ -1666,9 +1666,9 @@ uint16_t SPI_MSTransfer::events() {
     }
     if ( mtsca.size() > 0 ) {
       uint16_t array[mtsca.front()[1]];
-__disable_irq();
+      NVIC_DISABLE_IRQ(IRQ_SPI0); 
       mtsca.pop_front(array,sizeof(array)/2 );
-__enable_irq();
+      NVIC_ENABLE_IRQ(IRQ_SPI0);
       uint16_t checksum = 0, buf_pos = 0, buf[array[3]]; AsyncMST info; info.packetID = array[4];
       for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
       ( checksum == array[array[1]-1] ) ? info.error = 0 : info.error = 1;
