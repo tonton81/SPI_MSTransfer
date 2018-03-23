@@ -9,7 +9,8 @@
 #include <EEPROM.h>
 
 #define DATA_BUFFER_MAX 150
-#define _transfer_slowdown 0
+#define _transfer_slowdown_while_reading 0
+#define _delay_before_deassertion 25
 
 struct AsyncMST {
   uint16_t packetID = 0;
