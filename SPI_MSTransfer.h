@@ -9,8 +9,6 @@
 #include <EEPROM.h>
 
 #define DATA_BUFFER_MAX 150
-#define _transfer_slowdown_while_reading 0
-#define _delay_before_deassertion 25
 
 struct AsyncMST {
   uint16_t packetID = 0;
@@ -99,8 +97,8 @@ class SPI_MSTransfer : public Stream {
     volatile uint32_t       _spi_bus_speed;
     volatile uint8_t        chip_select = -1;
     volatile int8_t         eeprom_support = -1;
-
-
+    volatile uint8_t        _delay_before_deassertion = 25;
+    volatile uint8_t        _transfer_slowdown_while_reading = 0;
 
 
  //  below here future implementation / cleanup
