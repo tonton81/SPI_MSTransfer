@@ -56,9 +56,7 @@ void SPI_MSTransfer::debug(Stream &serial) {
 void SPI_MSTransfer::SPI_assert() {
   spi_port->beginTransaction(SPISettings(_spi_bus_speed, MSBFIRST, SPI_MODE0)); ::digitalWriteFast(chip_select, LOW);
 }
-void SPI_MSTransfer::SPI_deassert() { ::digitalWriteFast(chip_select, HIGH); spi_port->endTransaction(); }
-
-
+void SPI_MSTransfer::SPI_deassert() { delayMicroseconds(_delay_before_deassertion); ::digitalWriteFast(chip_select, HIGH); spi_port->endTransaction(); }
 
 bool SPI_MSTransfer::command_ack_response(uint16_t *data, uint32_t len) {
   uint8_t resend_count = 0; uint32_t timeout = micros(); uint16_t _crc = 0;
@@ -70,26 +68,25 @@ bool SPI_MSTransfer::command_ack_response(uint16_t *data, uint32_t len) {
     else if ( _crc == 0xBAAD ) {
       spi_port->transfer16(0xBEEF); SPI_deassert(); return 0;
     }
-    if ( micros() - timeout > 50 ) {
+    if ( micros() - timeout > 1000 ) {
       resend_count++;
       if ( resend_count > 3 ) {
         if ( debugSerial != nullptr ) {
-          Serial.print(F("DEBUG: [SLAVE CS ")); Serial.print(chip_select);
-          Serial.print(F("] [INFO] FAILED RESENDING ")); Serial.print(resend_count);
-          Serial.print(F(" TIMES. TRANSFER ABORTED.")); delay(1000);
+          Serial.print("DBG: [S_CS "); Serial.print(chip_select);
+          Serial.print("] FAIL_RES #"); Serial.print(resend_count);
+          Serial.print(" Tx ABORT. "); delay(1000);
         }
         break;
       }
       if ( debugSerial != nullptr ) {
-        Serial.print(F("] [INFO] FAILED RESENDING ")); Serial.print(resend_count);
-        Serial.print(F(" TIMES. RETRYING...")); delay(1000);
+        Serial.print("FAIL_Res #"); Serial.print(resend_count);
+        Serial.print(" RETRY..."); delay(1000);
       }
       timeout = micros();
     }
   }
   return 1;
 }
-
 
 void SPI_MSTransfer::digitalWriteFast(uint8_t pin, bool state) { digitalWrite(pin, state); }
 void SPI_MSTransfer::digitalWrite(uint8_t pin, bool state) {
@@ -106,7 +103,7 @@ void SPI_MSTransfer::digitalWrite(uint8_t pin, bool state) {
   for ( uint16_t i = 0; i < 3000; i++ ) {
     if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
       uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-      for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+      for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
       if ( checksum == buf[buf[1] - 1] ) {
         spi_port->transfer16(0xD0D0); // send confirmation
         SPI_deassert(); return;
@@ -130,7 +127,7 @@ bool SPI_MSTransfer::digitalRead(uint8_t pin) {
   for ( uint16_t i = 0; i < 3000; i++ ) {
     if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
       uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-      for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+      for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
       if ( checksum == buf[buf[1] - 1] ) {
         spi_port->transfer16(0xD0D0); // send confirmation
         SPI_deassert(); return buf[2];
@@ -153,7 +150,7 @@ void SPI_MSTransfer::pinMode(uint8_t pin, uint8_t state) {
   for ( uint16_t i = 0; i < 3000; i++ ) {
     if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
       uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-      for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+      for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
       if ( checksum == buf[buf[1] - 1] ) {
         spi_port->transfer16(0xD0D0); // send confirmation
         SPI_deassert(); return;
@@ -176,7 +173,7 @@ void SPI_MSTransfer::pinToggle(uint8_t pin) { // code written by defragster
   for ( uint16_t i = 0; i < 3000; i++ ) {
     if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
       uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-      for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+      for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
       if ( checksum == buf[buf[1] - 1] ) {
         spi_port->transfer16(0xD0D0); // send confirmation
         SPI_deassert(); return;
@@ -208,14 +205,12 @@ uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t 
     for ( uint16_t i = 0; i < length; i++ ) { data[data_pos] = buffer[i]; checksum ^= data[data_pos]; data_pos++; }
     data[data_pos] = checksum;
     if ( fire_and_forget ) {
-      spi_port->beginTransaction(SPISettings(_spi_bus_speed, MSBFIRST, SPI_MODE0));
-      ::digitalWriteFast(chip_select, LOW);
+      SPI_assert();
       for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
       uint32_t timeout = millis();
       while ( spi_port->transfer16(0xFFFF) != 0xBABE && millis() - timeout < 100 );
       spi_port->transfer16(0xD0D0); // send confirmation
-      ::digitalWriteFast(chip_select, HIGH);
-      spi_port->endTransaction();
+      SPI_deassert();
       return data[4]; // F&F, RETURN PACKETID
     }
     SPI_assert();
@@ -224,7 +219,7 @@ uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t 
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return buf[2];
@@ -252,7 +247,7 @@ void SPI_MSTransfer::begin(uint32_t baudrate) { // set remote serial port and ba
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return;
@@ -277,7 +272,7 @@ int SPI_MSTransfer::read(void) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return (int16_t)buf[2];
@@ -302,7 +297,7 @@ int SPI_MSTransfer::peek() {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return (int16_t)buf[2];
@@ -327,7 +322,7 @@ int SPI_MSTransfer::available(void) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return buf[2];
@@ -354,7 +349,7 @@ size_t SPI_MSTransfer::write(const uint8_t *buf, size_t size) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return buf[2];
@@ -379,7 +374,7 @@ void SPI_MSTransfer::flush() {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return;
@@ -427,7 +422,7 @@ int SPI_MSTransfer::read(int addr) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return (int16_t)buf[2];
@@ -453,7 +448,7 @@ void SPI_MSTransfer::write(int addr, uint8_t value) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); Serial.println("Complete!"); // send confirmation
           SPI_deassert();
@@ -479,7 +474,7 @@ void SPI_MSTransfer::update(int addr, uint8_t value) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); Serial.println("Complete!"); // send confirmation
           SPI_deassert();
@@ -503,7 +498,7 @@ uint16_t SPI_MSTransfer::length() {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return buf[2];
@@ -527,7 +522,7 @@ uint32_t SPI_MSTransfer::crc() {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return ((uint32_t)buf[2] << 16 | buf[3]);
@@ -553,7 +548,7 @@ void SPI_MSTransfer::setTX(uint8_t pin, bool opendrain) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return;
@@ -579,7 +574,7 @@ void SPI_MSTransfer::setRX(uint8_t pin) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return;
@@ -605,7 +600,7 @@ bool SPI_MSTransfer::attachRts(uint8_t pin) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return buf[2];
@@ -631,7 +626,7 @@ bool SPI_MSTransfer::attachCts(uint8_t pin) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return buf[2];
@@ -656,7 +651,7 @@ void SPI_MSTransfer::analogReadResolution(unsigned int bits) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return;
@@ -681,7 +676,7 @@ int SPI_MSTransfer::analogRead(uint8_t pin) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return (int)buf[2];
@@ -707,7 +702,7 @@ uint32_t SPI_MSTransfer::analogWriteResolution(uint32_t bits) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return ((uint32_t)buf[2] << 16 | buf[3]);
@@ -733,7 +728,7 @@ void SPI_MSTransfer::analogWrite(uint8_t pin, int val) {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return;
@@ -1617,7 +1612,7 @@ void SPI_MSTransfer::_detect() {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           SPI_deassert(); return;
         }
@@ -1642,7 +1637,7 @@ uint16_t SPI_MSTransfer::events() {
     for ( uint16_t i = 0; i < 3000; i++ ) {
       if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           if ( buf[1] > 4 ) {
             uint16_t _slave_array[buf[3]];
