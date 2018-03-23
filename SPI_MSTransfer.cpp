@@ -24,6 +24,7 @@ SPI_MSTransfer::SPI_MSTransfer(const char *data, uint8_t cs, SPIClass *SPIWire, 
   chip_select = cs; spi_port = SPIWire; _master_access = 1; _spi_bus_speed = spi_bus_speed;
   ::pinMode(cs, OUTPUT); // make sure CS is OUTPUT before deassertion.
   ::digitalWriteFast(cs, HIGH); // deassert the CS way before SPI initializes :)
+  if ( spi_bus_speed >= 12000000 ) _delay_before_deassertion = 0;
   debugSerial = nullptr;
   if ( !strcmp(data, "Serial")       ) { _serial_port_identifier = 0; }
   else if ( !strcmp(data, "Serial1") ) { _serial_port_identifier = 1; }
@@ -58,6 +59,8 @@ void SPI_MSTransfer::SPI_assert() {
 }
 void SPI_MSTransfer::SPI_deassert() { delayMicroseconds(_delay_before_deassertion); ::digitalWriteFast(chip_select, HIGH); spi_port->endTransaction(); }
 
+
+
 bool SPI_MSTransfer::command_ack_response(uint16_t *data, uint32_t len) {
   uint8_t resend_count = 0; uint32_t timeout = micros(); uint16_t _crc = 0;
   while ( 1 ) {
@@ -72,21 +75,22 @@ bool SPI_MSTransfer::command_ack_response(uint16_t *data, uint32_t len) {
       resend_count++;
       if ( resend_count > 3 ) {
         if ( debugSerial != nullptr ) {
-          Serial.print("DBG: [S_CS "); Serial.print(chip_select);
-          Serial.print("] FAIL_RES #"); Serial.print(resend_count);
-          Serial.print(" Tx ABORT. "); delay(1000);
+          Serial.print(F("DEBUG: [SLAVE CS ")); Serial.print(chip_select);
+          Serial.print(F("] [INFO] FAILED RESENDING ")); Serial.print(resend_count);
+          Serial.print(F(" TIMES. TRANSFER ABORTED.")); delay(1000);
         }
         break;
       }
       if ( debugSerial != nullptr ) {
-        Serial.print("FAIL_Res #"); Serial.print(resend_count);
-        Serial.print(" RETRY..."); delay(1000);
+        Serial.print(F("] [INFO] FAILED RESENDING ")); Serial.print(resend_count);
+        Serial.print(F(" TIMES. RETRYING...")); delay(1000);
       }
       timeout = micros();
     }
   }
   return 1;
 }
+
 
 void SPI_MSTransfer::digitalWriteFast(uint8_t pin, bool state) { digitalWrite(pin, state); }
 void SPI_MSTransfer::digitalWrite(uint8_t pin, bool state) {
