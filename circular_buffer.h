@@ -128,6 +128,31 @@ Serial.print("Peeking: ");
   }
 
 }
+template<typename T, uint16_t _size, uint16_t multi>
+void Circular_Buffer<T,_size,multi>::print(const char *p) {
+  if ( multi ) return;
+  write((T*)p,strlen(p));
+}
+
+template<typename T, uint16_t _size, uint16_t multi>
+void Circular_Buffer<T,_size,multi>::println(const char *p) {
+  if ( multi ) return;
+  write((T*)p,strlen(p));
+  write('\n');
+}
+
+
+template<typename T, uint16_t _size, uint16_t multi>
+void Circular_Buffer<T,_size,multi>::push_front(const T *buffer, uint16_t length) {
+  if ( multi ) {
+    push_front(_array_pointer);
+    memmove(_cabuf[peek()],buffer,length*sizeof(T));
+    if ( _array_pointer++ >= _size -1 ) _array_pointer = 0;
+    return;
+  }
+  for ( uint16_t i = length-1; i > 0; i-- ) push_front(buffer[i]);
+  push_front(buffer[0]);
+}
 
 template<typename T, uint16_t _size, uint16_t multi>
 T Circular_Buffer<T,_size,multi>::pop_back() {
