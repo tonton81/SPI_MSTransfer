@@ -29,7 +29,7 @@ void setup() {
 	}
 	slave.begin( );
 	slave.onTransfer(myCallback);
-	//slave.debug(Serial); // SPI_MST Debug error tracking
+	// slave.debug(Serial); // SPI_MST Debug error tracking
 
 }
 void led() {
@@ -41,6 +41,9 @@ void loop() {
 }
 
 static uint16_t last_packetID = 0;
+elapsedMillis TogClk;
+uint32_t TogCnt = 0;
+uint32_t FaFCnt = 0;
 void myCallback(uint16_t *buffer, uint16_t length, AsyncMST info) {
 	if ( 55 == info.packetID ) {
 		if ( 48 != length ) {
@@ -124,9 +127,23 @@ void myCallback(uint16_t *buffer, uint16_t length, AsyncMST info) {
 
 // This provides a terse output with error checked based on MASTER output to the 12 DOUBLE value Array
 			{
+				static uint16_t TogLast = 0;
+				static uint16_t TogHz =0;
+				static uint16_t FaFHz =0;
 				static double LastVal = 100000;
 				static uint32_t ChkErr = 0;
 				static uint32_t CBcount = 0;
+				if ( digitalReadFast( LED_BUILTIN) != TogLast ) { 
+					TogLast = !TogLast; 
+					TogCnt++; 
+				}
+				if ( TogClk >=1000 ) {
+					TogClk -= 1000;
+					TogHz = TogCnt;
+					TogCnt = 0;
+					FaFHz = FaFCnt;
+					FaFCnt = 0;
+				}
 				if ( last_packetID != info.packetID ) {
 					LastVal += 12;
 					if ( LastVal > 65536 && LastVal < 100000 ) LastVal -= 65536;
@@ -135,6 +152,7 @@ void myCallback(uint16_t *buffer, uint16_t length, AsyncMST info) {
 				double DiffMiss = 0;
 				uint32_t ErrSeen = 0;
 				CBcount++;
+				FaFCnt++;
 				for ( uint32_t ii = 0; ii < 12; ii++ ) {
 					LastVal++;
 					if ( 65536 == LastVal ) LastVal = 0;
@@ -158,6 +176,10 @@ void myCallback(uint16_t *buffer, uint16_t length, AsyncMST info) {
 				Serial.print( CBcount );
 				Serial.print(",");
 				Serial.print( ChkErr );
+				Serial.print(" [");
+				Serial.print( FaFHz );
+				Serial.print(" ,");
+				Serial.print( TogHz );
 				Serial.println();
 				LastCB = 0;
 			}
