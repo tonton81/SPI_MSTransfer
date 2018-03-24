@@ -2,7 +2,11 @@
 #include <SPI_MSTransfer.h>
 #include "A_ConfigDefines.h"
 
-SPI_MSTransfer teensy_gpio = SPI_MSTransfer("Serial", SPI_MST_CS, &SPI_MST_BUS, 30000000 );
+//#define SPI_SPEED 30500
+#define SPI_SPEED 30000000
+#define OT_CALC   100*(30000000/SPI_SPEED)
+
+SPI_MSTransfer teensy_gpio = SPI_MSTransfer("Serial", SPI_MST_CS, &SPI_MST_BUS, SPI_SPEED ); // bad with default timeouts
 
 void setup() {
   Serial.begin(115200);
@@ -30,7 +34,7 @@ uint32_t OverTime = 0;
 void loop() {
   static uint32_t _timer = millis();
   if ( !(millis() % 100) )  { teensy_gpio.pinToggle(LED_BUILTIN); Serial.print("^LT"); delay(1); }
-  if ( millis() - _timer >= 2 ) {
+  if ( millis() - _timer >= 1 ) {
     _timer = millis();
     uint32_t _time = micros();
 
@@ -51,9 +55,11 @@ void loop() {
     else
       teensy_gpio.transfer16((uint16_t *)MST_PrintVals, sizeof(MST_PrintVals) / 2, 55, 1);
     _time = micros() - _time;
-    Serial.print("micros() _time==");
+    Serial.print(" OT_CALC==");
+    Serial.print(OT_CALC);
+    Serial.print("  micros() _time==");
     Serial.println(_time);
-    if ( _time > 1000 ) OverTime++;
+    if ( _time > OT_CALC ) OverTime++;
     teensy_gpio.events();
   }
 }
