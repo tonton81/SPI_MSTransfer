@@ -8,6 +8,8 @@
 SPI_MSTransfer *_slave_pointer;
 _slave_handler_ptr SPI_MSTransfer::_slave_handler = nullptr;
 _master_handler_ptr SPI_MSTransfer::_master_handler = nullptr;
+_slave_handler_ptr_uint8_t SPI_MSTransfer::_slave_handler_uint8_t = nullptr;
+_master_handler_ptr_uint8_t SPI_MSTransfer::_master_handler_uint8_t = nullptr;
 bool SPI_MSTransfer::watchdogEnabled = 0;
 uint32_t SPI_MSTransfer::watchdogFeedInterval = millis();
 uint32_t SPI_MSTransfer::watchdogTimeout = 0;
@@ -19,7 +21,10 @@ void SPI_MSTransfer::onTransfer(_slave_handler_ptr handler) {
   if ( _master_access ) _master_handler = handler;
   if ( _slave_access ) _slave_handler = handler;
 }
-
+void SPI_MSTransfer::onTransfer(_slave_handler_ptr_uint8_t handler) {
+  if ( _master_access ) _master_handler_uint8_t = handler;
+  if ( _slave_access ) _slave_handler_uint8_t = handler;
+}
 SPI_MSTransfer::SPI_MSTransfer(const char *data, uint8_t cs, SPIClass *SPIWire, uint32_t spi_bus_speed) {
   chip_select = cs; spi_port = SPIWire; _master_access = 1; _spi_bus_speed = spi_bus_speed;
   ::pinMode(cs, OUTPUT); // make sure CS is OUTPUT before deassertion.
@@ -182,6 +187,82 @@ void SPI_MSTransfer::pinToggle(uint8_t pin) { // code written by defragster
     }
   }
   SPI_deassert(); return;
+}
+uint8_t SPI_MSTransfer::transfer(uint8_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget) {
+  if ( _slave_access ) {
+    uint16_t len = ( !(length % 2) ) ? ( length / 2 ) : ( length / 2 ) + 1;
+    uint16_t data[6 + len], checksum = 0, data_pos = 0;
+    data[data_pos] = 0xAA55; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0001; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = length; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = packetID; checksum ^= data[data_pos]; data_pos++;
+    bool odd_or_even = ( (length % 2) );
+    for ( uint16_t i = 0; i < length; i += 2 ) {
+      if ( odd_or_even ) {
+        if ( i + 1 < length ) {
+          data[data_pos] = ((uint16_t)(buffer[i] << 8) | buffer[i+1]); checksum ^= data[data_pos]; data_pos++;
+        }
+        else {
+          data[data_pos] = buffer[i]; checksum ^= data[data_pos]; data_pos++;
+        }
+      }
+      else {
+          data[data_pos] = ((uint16_t)(buffer[i] << 8) | buffer[i+1]); checksum ^= data[data_pos]; data_pos++;
+      }
+    }
+    data[data_pos] = checksum;
+    stmca.push_back(data,data[1]);
+    return packetID;
+  }
+  if ( _master_access ) {
+    uint16_t len = ( !(length % 2) ) ? ( length / 2 ) : ( length / 2 ) + 1;
+    uint16_t data[6 + len], checksum = 0, data_pos = 0;
+    data[data_pos] = ( fire_and_forget ) ? 0x9254 : 0x9253; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0000; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = length; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = packetID; checksum ^= data[data_pos]; data_pos++;
+    bool odd_or_even = ( (length % 2) );
+    for ( uint16_t i = 0; i < length; i += 2 ) {
+      if ( odd_or_even ) {
+        if ( i + 1 < length ) {
+          data[data_pos] = ((uint16_t)(buffer[i] << 8) | buffer[i+1]); checksum ^= data[data_pos]; data_pos++;
+        }
+        else {
+          data[data_pos] = buffer[i]; checksum ^= data[data_pos]; data_pos++;
+        }
+      }
+      else {
+          data[data_pos] = ((uint16_t)(buffer[i] << 8) | buffer[i+1]); checksum ^= data[data_pos]; data_pos++;
+      }
+    }
+    data[data_pos] = checksum;
+    if ( fire_and_forget ) {
+      SPI_assert();
+      for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+      uint32_t timeout = millis();
+      while ( spi_port->transfer16(0xFFFF) != 0xBABE && millis() - timeout < 100 );
+      spi_port->transfer16(0xD0D0); // send confirmation
+      SPI_deassert();
+      return data[4]; // F&F, RETURN PACKETID
+    }
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return buf[2];
+        }
+      }
+    }
+    SPI_deassert();
+  }
+  return 0;
 }
 uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget) {
   if ( _slave_access ) {
@@ -451,7 +532,7 @@ void SPI_MSTransfer::write(int addr, uint8_t value) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
-          spi_port->transfer16(0xD0D0); Serial.println("Complete!"); // send confirmation
+          spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert();
         }
       }
@@ -477,7 +558,7 @@ void SPI_MSTransfer::update(int addr, uint8_t value) {
         uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
-          spi_port->transfer16(0xD0D0); Serial.println("Complete!"); // send confirmation
+          spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert();
         }
       }
@@ -891,8 +972,9 @@ void spi0_isr(void) {
   if ( data[1] && buffer_pos >= data[1] ) {
     len = data[1];
 
+
     /* F&F BLOCK START */
-    if ( data[0] == 0x9244 ) {
+    if ( data[0] == 0x9244 || data[0] == 0x9254 ) {
       _slave_pointer->SPI_MSTransfer::mtsca.push_back(data, len);
       while ( !(GPIOD_PDIR & 0x01) ) { // wait here until MASTER confirms F&F receipt
         if ( SPI0_SR & 0xF0 ) {
@@ -1002,7 +1084,23 @@ void spi0_isr(void) {
           }
           SPI0_SR |= SPI_SR_RFDF; return;
         }
-      case 0x9243: { // MASTER SENDS PACKET TO SLAVE QUEUE WITH CRC ACKNOWLEDGEMENT
+      case 0x9243: { // MASTER SENDS PACKET TO SLAVE QUEUE WITH CRC ACKNOWLEDGEMENT (UINT16_T)
+          switch ( data[2] ) {
+            case 0x0000: {
+                _slave_pointer->SPI_MSTransfer::mtsca.push_back(data, len);
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, data[4], checksum ^= data[4] };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+          }
+          SPI0_SR |= SPI_SR_RFDF; return;
+        }
+      case 0x9253: { // MASTER SENDS PACKET TO SLAVE QUEUE WITH CRC ACKNOWLEDGEMENT (UINT8_T)
           switch ( data[2] ) {
             case 0x0000: {
                 _slave_pointer->SPI_MSTransfer::mtsca.push_back(data, len);
@@ -1622,9 +1720,6 @@ void SPI_MSTransfer::_detect() {
     SPI_deassert(); return;
   }
 }
-
-
-
 uint16_t SPI_MSTransfer::events() {
   if ( _master_access ) {
     uint16_t data[4], checksum = 0, data_pos = 0;
@@ -1641,12 +1736,28 @@ uint16_t SPI_MSTransfer::events() {
         for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
         if ( checksum == buf[buf[1] - 1] ) {
           if ( buf[1] > 4 ) {
-            uint16_t _slave_array[buf[3]];
-            memmove (&_slave_array[0], &buf[5], buf[3] * 2 );
-            AsyncMST info; info.packetID = buf[4]; info.slave = chip_select;
-            _master_handler(_slave_array, buf[3], info);
-            spi_port->transfer16(0xD0D0); // send confirmation
-            SPI_deassert(); return 0x00A6;
+            if ( buf[2] == 0x001 ) {
+              bool odd_or_even = ( (buf[3] % 2) );
+              uint8_t _slave_array[buf[3]];
+              for ( uint16_t i = 0, j = 0; i < buf[3]/2; i++ ) {
+                _slave_array[j] = buf[5+i] >> 8;
+                _slave_array[j+1] = (uint8_t)buf[5+i];
+                j+=2;
+              }
+              if ( odd_or_even ) _slave_array[sizeof(_slave_array)-1] = buf[buf[1]-2];
+              AsyncMST info; info.packetID = buf[4]; info.slave = chip_select;
+              _master_handler_uint8_t(_slave_array, buf[3], info);
+              spi_port->transfer16(0xD0D0); // send confirmation
+              SPI_deassert(); return 0x00A6;
+            }
+            else if ( buf[2] == 0x000 ) {
+              uint16_t _slave_array[buf[3]];
+              memmove (&_slave_array[0], &buf[5], buf[3] * 2 );
+              AsyncMST info; info.packetID = buf[4]; info.slave = chip_select;
+              _master_handler(_slave_array, buf[3], info);
+              spi_port->transfer16(0xD0D0); // send confirmation
+              SPI_deassert(); return 0x00A6;
+            }
           }
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return 0;
@@ -1665,11 +1776,27 @@ uint16_t SPI_MSTransfer::events() {
       NVIC_DISABLE_IRQ(IRQ_SPI0); 
       mtsca.pop_front(array,sizeof(array)/2 );
       NVIC_ENABLE_IRQ(IRQ_SPI0);
-      uint16_t checksum = 0, buf_pos = 0, buf[array[3]]; AsyncMST info; info.packetID = array[4];
-      for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
-      ( checksum == array[array[1]-1] ) ? info.error = 0 : info.error = 1;
-      memmove (&buf[0], &array[5], array[3] * 2 );
-      if ( _slave_handler != nullptr ) _slave_handler(buf, array[3], info);
+      if ( array[0] == 0x9254 ) {
+        uint16_t checksum = 0, buf_pos = 0; AsyncMST info; info.packetID = array[4];
+        for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
+        ( checksum == array[array[1]-1] ) ? info.error = 0 : info.error = 1;
+        bool odd_or_even = ( (array[3] % 2) );
+        uint8_t buf[array[3]];
+        for ( uint16_t i = 0, j = 0; i < array[3]/2; i++ ) {
+          buf[j] = array[5+i] >> 8;
+          buf[j+1] = (uint8_t)array[5+i];
+          j+=2;
+        }
+        if ( odd_or_even ) buf[sizeof(buf)-1] = array[array[1]-2];
+        if ( _slave_handler_uint8_t != nullptr ) _slave_handler_uint8_t(buf, array[3], info);
+      }
+      else if ( array[0] == 0x9244 ) {
+        uint16_t checksum = 0, buf_pos = 0, buf[array[3]]; AsyncMST info; info.packetID = array[4];
+        for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
+        ( checksum == array[array[1]-1] ) ? info.error = 0 : info.error = 1;
+        memmove (&buf[0], &array[5], array[3] * 2 );
+        if ( _slave_handler != nullptr ) _slave_handler(buf, array[3], info);
+      }
     }
   }
   return 0;
