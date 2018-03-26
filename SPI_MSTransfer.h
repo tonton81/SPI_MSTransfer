@@ -17,6 +17,8 @@ struct AsyncMST {
 
 typedef void (*_slave_handler_ptr)(uint16_t* buffer, uint16_t length, AsyncMST info);
 typedef void (*_master_handler_ptr)(uint16_t* buffer, uint16_t length, AsyncMST info);
+typedef void (*_slave_handler_ptr_uint8_t)(uint8_t* buffer, uint16_t length, AsyncMST info);
+typedef void (*_master_handler_ptr_uint8_t)(uint8_t* buffer, uint16_t length, AsyncMST info);
 
 
 class SPI_MSTransfer : public Stream {
@@ -31,9 +33,11 @@ class SPI_MSTransfer : public Stream {
     virtual bool            digitalReadFast(uint8_t pin);
     virtual void            pinMode(uint8_t pin, uint8_t state);
     virtual void            pinToggle(uint8_t pin);
+    virtual uint8_t         transfer(uint8_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget = 0);
     virtual uint16_t        transfer16(uint16_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget = 0);
     virtual uint16_t        events();
     virtual void            onTransfer(_slave_handler_ptr handler);
+    virtual void            onTransfer(_slave_handler_ptr_uint8_t handler);
     virtual void            begin();
     virtual void            begin(uint32_t baudrate);
     virtual int             read();
@@ -85,6 +89,8 @@ class SPI_MSTransfer : public Stream {
     SPIClass                *spi_port;
     static                  _slave_handler_ptr _slave_handler; 
     static                  _master_handler_ptr _master_handler; 
+    static                  _slave_handler_ptr_uint8_t _slave_handler_uint8_t; 
+    static                  _master_handler_ptr_uint8_t _master_handler_uint8_t; 
     static bool             watchdogEnabled;
     static uint32_t         watchdogFeedInterval;
     static uint32_t         watchdogTimeout;
