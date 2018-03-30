@@ -60,6 +60,8 @@ Example (see the examples for layout)
 where 
 * teensy_gpio is the name to be used to access member functions of the library. This is user defined. You can call it anything. It's purpose is not just for the SPI_MSTransfer callback communication, but an object which has different attributes depending on the construction.
 
+
+
 "teensy_gpio" has a special use case, is really assigned to "Serial", which is USBSerial of the slave.
 Not only does it have events() rights, but gpio rights as well, pinmode, analog, etc, they are global between objects.
 
@@ -117,3 +119,149 @@ why, so the callback works if get something back from the slave.
 Now, you have the option to add (real nice to know you are getting data) a command to blink the LED on the slave to let you know data was sent:
 ```teensy_gpio.pinToggle(LED_BUILTIN);```
 If you are sending alot of data wrap it in a timer to send about every 1 second.
+
+## SLAVE USAGE
+
+Make sure you include the SPI_MSTransfer library
+```#include <SPI_MSTransfer.h>```
+
+Again, define an instance for the library, in this case we just call it "slave"
+```SPI_MSTransfer slave = SPI_MSTransfer("SLAVE", "STANDALONE");```
+Note for the slave all we are doing is telling the library that this is a slave device "SLAVE" and it is "STANDALONE".
+
+In the setup section of the sketch, you will need to tell give the slave a begin and ontransfer of data use the callback function "myCallback" which is where all the fun stuff happens:
+```
+slave.begin( );
+slave.onTransfer(myCallback);
+```
+Another command you can use is the debug command.  Use this sparingly:
+
+```slave.debug(Serial); // SPI_MST Debug error tracking```
+
+In the sketch's loop you also have the ability to send data back to the master from the slave. This code snippet demonstrates how you can do that.  The only command you need to send the data back is the onTransfer command which is the same as in the Master's usage.
+```
+  static uint32_t _timer = millis();
+  //This section is optional and demonstrates how to send data from
+  //slave back to the master
+  if ( millis() - _timer > 5 ) {
+    uint16_t *buf;
+    double MST_PrintVals[12];
+    buf = (uint16_t *)MST_PrintVals;
+    int ii = 0;
+    static uint16_t __count = 0;
+    for ( uint32_t i = 0; i < sizeof(MST_PrintVals) / sizeof( MST_PrintVals[0]  ); i++ ) MST_PrintVals[i] = __count++;
+    _timer = millis();
+    slave.transfer16((uint16_t *)MST_PrintVals, sizeof(MST_PrintVals) / 2, 55, 1);
+  }
+```
+At the end of the loop you need to add the event command again in the same way as you did the master:
+```	slave.events();```
+
+Now for the critical piece for the slave, the myCallback function.
+
+Lets dissect some code to demonstrate how this works.
+
+The callback function takes 3 parameters: 
+- a pointer to buffer to hold the packet data when it is received. In this case it is defined as a uint16_t even though we are transferring doubles. 
+- The length of the packet and 
+- the info on the packet, "AsyncMST info".  Available in info are the packetID, error, and slave ID.
+```
+void myCallback(uint16_t *buffer, uint16_t length, AsyncMST info) {
+```
+While not used in this example is that you can have multiple callbacks depending on the size of the variables being transfered, e.g.,
+```void myCallback1(uint8_t *buffer, uint16_t length, AsyncMST info)```
+or 
+```void myCallback2(uint16_t *buffer, uint16_t length, AsyncMST info)```
+to transfer floats as opposed to doubles in our example.
+
+If we defined a packetID number in the MASTER as "55" we can test what to do with that packet by comparing it to the packetID received using info.packetID:
+
+```	if ( 55 == info.packetID ) {```
+
+Once you get the right packet you should test its length to make sure we have a complete packet.  Since we are using doubles in this example that equates to 4 bytes x 12 variables that we sent from the MASTER which equates to 48 for the lenght. If the wrong length the send message to serial monitor letting us know.  Same thing applies if there is an error which we test for using info.error.
+
+```
+		if ( 48 != length ) {
+			Serial.print("Bad Length: "); Serial.println(length); // If this shows then the SPI Passed array size is nor wrong
+		}
+		else if ( 0 != info.error ) {
+			Serial.println("\nBad CRC: ");
+		}
+```
+
+If the packet passes out tests then you need to tell the sketch what to do with the packet.  In this case with are assigning the buffer to the variable MST_PrintVals and parsing back to string to send to serial port (USB since we are using Serial):
+
+```
+		else {
+			double* MST_PrintVals;
+			MST_PrintVals = (double *)buffer;
+			{
+				//trig conversions
+				float rad2deg = 180.0f / PI;
+				float deg2rad = PI / 180.0f;
+				int  textLength = 12 * 31;
+				char text[textLength];
+
+				char utcText[30];
+				char tsIMUText[30];
+				char tsGPSText[30];
+
+				// KF parameters
+				char latText[30];
+				char lonText[30];
+				char altText[30];
+				char pk1xText[30];
+				char pk1yText[30];
+				char pk1zText[30];
+				char nuk1xText[30];
+				char nuk1yText[30];
+				char nuk1zText[30];
+
+				int ii = 0;
+				dtostrf( MST_PrintVals[ii] , 10, 6, utcText);
+				ii++;
+				dtostrf( MST_PrintVals[ii] * 0.000001f, 10, 4, tsIMUText);
+				ii++;
+				dtostrf( MST_PrintVals[ii] * 0.000001f, 10, 4, tsGPSText);
+				ii++;
+				dtostrf( MST_PrintVals[ii] *rad2deg, 10, 6, latText);
+				ii++;
+				dtostrf( MST_PrintVals[ii] *rad2deg, 10, 6, lonText);
+				ii++;
+				dtostrf( MST_PrintVals[ii] , 10, 4, altText);
+				ii++;
+				dtostrf(sqrt( MST_PrintVals[ii] ), 10, 4, pk1xText);
+				ii++;
+				dtostrf(sqrt( MST_PrintVals[ii] ), 10, 4, pk1yText);
+				ii++;
+				dtostrf(sqrt( MST_PrintVals[ii] ), 10, 4, pk1zText);
+				ii++;
+				dtostrf( MST_PrintVals[ii] , 10, 4, nuk1xText);
+				ii++;
+				dtostrf( MST_PrintVals[ii] , 10, 4, nuk1yText);
+				ii++;
+				dtostrf( MST_PrintVals[ii] , 10, 4, nuk1zText);
+
+				// Create single text parameter and print it
+				snprintf(text, textLength, "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s",
+				         utcText, tsIMUText, tsGPSText,
+				         latText, lonText, altText,
+				         pk1xText, pk1yText, pk1zText,
+				         nuk1xText, nuk1yText, nuk1zText);
+				Serial.println(text);
+				//Serial.send_now();
+			}
+		}
+```
+
+If the the packetID is not covered we again send a message with the packet info that we received.
+
+```
+	}
+	else {
+        Serial.print("Packet Received with ");
+		Serial.print("PacketID: ");
+		Serial.println(info.packetID);
+	}
+}
+```
