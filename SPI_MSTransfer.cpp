@@ -46,8 +46,8 @@ _master_handler_ptr_uint8_t SPI_MSTransfer::_master_handler_uint8_t = nullptr;
 bool SPI_MSTransfer::watchdogEnabled = 0;
 uint32_t SPI_MSTransfer::watchdogFeedInterval = millis();
 uint32_t SPI_MSTransfer::watchdogTimeout = 0;
-Circular_Buffer<uint16_t, 32, 150> SPI_MSTransfer::mtsca;
-Circular_Buffer<uint16_t, 32, 150> SPI_MSTransfer::stmca;
+Circular_Buffer<uint16_t, QUEUE_SLOTS, DATA_BUFFER_MAX> SPI_MSTransfer::mtsca;
+Circular_Buffer<uint16_t, QUEUE_SLOTS, DATA_BUFFER_MAX> SPI_MSTransfer::stmca;
 
 
 void SPI_MSTransfer::onTransfer(_slave_handler_ptr handler) {
@@ -1753,8 +1753,12 @@ void SPI_MSTransfer::_detect() {
     SPI_deassert(); return;
   }
 }
-uint16_t SPI_MSTransfer::events() {
+uint16_t SPI_MSTransfer::events(uint32_t MinTime) {
   if ( _master_access ) {
+    static uint32_t LastTime = 0;
+    if ( millis() - LastTime < MinTime ) return 0;
+    LastTime = millis();
+
     uint16_t data[4], checksum = 0, data_pos = 0;
     data[data_pos] = 0x9712; checksum ^= data[data_pos]; data_pos++; // HEADER
     data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
