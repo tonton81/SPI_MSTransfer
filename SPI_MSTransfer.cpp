@@ -107,6 +107,8 @@ bool SPI_MSTransfer::command_ack_response(uint16_t *data, uint32_t len) {
     else if ( _crc == 0xBAAD ) {
       spi_port->transfer16(0xBEEF); SPI_deassert(); return 0;
     }
+    else if ( _crc == 0xADD0 ) _slave_data_available = 1;
+
     if ( micros() - timeout > 1000 ) {
       resend_count++;
       if ( resend_count > 3 ) {
@@ -1026,6 +1028,7 @@ void spi0_isr(void) {
 
     for ( uint16_t i = 0; i < len - 1; i++ ) process_crc ^= data[i];
 
+    static bool _swap = 1; _swap = 1;
     while ( 1 ) { // wait here until MASTER confirms ACK receipt
       if ( !(GPIOD_PDIR & 0x01) ) {
         if ( SPI0_SR & 0xF0 ) {
@@ -1033,8 +1036,16 @@ void spi0_isr(void) {
             SPI0_PUSHR_SLAVE = 0xBAAD; SPI0_POPR;
           }
           else {
-            SPI0_PUSHR_SLAVE = 0xF00D;
-            if ( SPI0_POPR == 0xBEEF ) break;
+            if ( _swap && _slave_pointer->SPI_MSTransfer::stmca.size() > 0 ) {
+              _swap = 0;
+              SPI0_PUSHR_SLAVE = 0xADD0;
+              SPI0_POPR;
+            }
+            else {
+              _swap = 0;
+              SPI0_PUSHR_SLAVE = 0xF00D;
+              if ( SPI0_POPR == 0xBEEF ) break;
+            }
           }
         }
       }
@@ -1755,6 +1766,7 @@ void SPI_MSTransfer::_detect() {
 }
 uint16_t SPI_MSTransfer::events(uint32_t MinTime) {
   if ( _master_access ) {
+    if ( !_slave_data_available ) return 0;
     static uint32_t LastTime = 0;
     if ( millis() - LastTime < MinTime ) return 0;
     LastTime = millis();
@@ -1796,6 +1808,7 @@ uint16_t SPI_MSTransfer::events(uint32_t MinTime) {
               SPI_deassert(); return 0x00A6;
             }
           }
+          _slave_data_available = 0;
           spi_port->transfer16(0xD0D0); // send confirmation
           SPI_deassert(); return 0;
         }
