@@ -41,7 +41,8 @@
 #include "circular_buffer.h"
 #include <EEPROM.h>
 
-#define DATA_BUFFER_MAX 150
+#define DATA_BUFFER_MAX 200
+#define QUEUE_SLOTS 12
 
 struct AsyncMST {
   uint16_t packetID = 0;
@@ -68,7 +69,7 @@ class SPI_MSTransfer : public Stream {
     virtual void            pinToggle(uint8_t pin);
     virtual uint8_t         transfer(uint8_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget = 0);
     virtual uint16_t        transfer16(uint16_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget = 0);
-    virtual uint16_t        events();
+    virtual uint16_t        events(uint32_t MinTime = 100);
     virtual void            onTransfer(_slave_handler_ptr handler);
     virtual void            onTransfer(_slave_handler_ptr_uint8_t handler);
     virtual void            begin();
@@ -91,8 +92,8 @@ class SPI_MSTransfer : public Stream {
     virtual void            analogWrite(uint8_t pin, int val);
     virtual void            watchdog(uint32_t value);
     virtual void            _detect();
-    static                  Circular_Buffer<uint16_t, 32, 150> mtsca;
-    static                  Circular_Buffer<uint16_t, 32, 150> stmca;
+    static                  Circular_Buffer<uint16_t, QUEUE_SLOTS, DATA_BUFFER_MAX> mtsca;
+    static                  Circular_Buffer<uint16_t, QUEUE_SLOTS, DATA_BUFFER_MAX> stmca;
     virtual size_t          print(const char *p);
     virtual size_t          println(const char *p);
     virtual int             read(int addr); // EEPROM
