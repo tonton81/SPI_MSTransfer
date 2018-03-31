@@ -139,6 +139,7 @@ class SPI_MSTransfer : public Stream {
     volatile int8_t         eeprom_support = -1;
     volatile uint8_t        _delay_before_deassertion = 25;
     volatile uint8_t        _transfer_slowdown_while_reading = 0;
+    volatile bool           _slave_data_available = 0;
 
 
  //  below here future implementation / cleanup
