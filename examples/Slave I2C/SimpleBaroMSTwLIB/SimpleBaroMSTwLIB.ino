@@ -26,7 +26,6 @@ void setup()
 
   BaroSensor.begin(sWire);
   BaroSensor.I2Cscan();
-  BaroSensor.begin(sWire);
   BaroSensor.dumpDebugOutput();
 }
 
