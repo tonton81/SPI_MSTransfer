@@ -72,14 +72,14 @@ class SPI_MSTransfer : public Stream {
     virtual uint16_t        events(uint32_t MinTime = 100);
     virtual void            onTransfer(_slave_handler_ptr handler);
     virtual void            onTransfer(_slave_handler_ptr_uint8_t handler);
-    virtual void            begin();
+    virtual void            begin(); // SLAVE // WIRE
     virtual void            begin(uint32_t baudrate);
-    virtual int             read();
-    virtual int             available();
-    virtual int             peek();
-    virtual size_t          write(uint8_t val) { return write(&val, 1); } 
-    virtual size_t          write(const char *buffer, size_t size) { return write((const uint8_t *)buffer, size); }
-    virtual size_t          write(const uint8_t *buf, size_t size);
+    virtual int             read(); // SERIAL // WIRE
+    virtual int             available(); // SERIAL // WIRE
+    virtual int             peek(); // SERIAL // WIRE
+    virtual size_t          write(uint8_t val) { return write(&val, 1); }  // SERIAL // WIRE
+    virtual size_t          write(const char *buffer, size_t size) { return write((const uint8_t *)buffer, size); }  // SERIAL // WIRE
+    virtual size_t          write(const uint8_t *buf, size_t size);  // SERIAL // WIRE
     virtual void            flush();
     virtual void            setTX(uint8_t pin, bool opendrain=false);
     virtual void            setRX(uint8_t pin);
@@ -102,17 +102,24 @@ class SPI_MSTransfer : public Stream {
     virtual uint16_t        length(); // EEPROM
     virtual uint32_t        crc(); // EEPROM
     Stream*                 debugSerial;
-
-
-
+    virtual void            setSCL(uint8_t pin); // WIRE
+    virtual void            setSDA(uint8_t pin); // WIRE
+    virtual void            beginTransmission(uint8_t addr); // WIRE
+    virtual uint8_t         endTransmission(uint8_t sendStop = 1); // WIRE
+    virtual void            setClock(uint32_t frequency); // WIRE
+    virtual void            send(uint8_t b) { write(b); } // WIRE
+    virtual void            send(uint8_t *s, uint8_t n ) { write(s, n); } // WIRE
+    virtual void            send(int n) { write((uint8_t)n); } // WIRE
+    virtual uint8_t         receive(void) { int c = read(); if (c < 0) return 0; return c;	} // WIRE
+    virtual uint8_t         requestFrom(uint8_t address, uint8_t quantity, uint8_t sendStop);
+    virtual uint8_t         requestFrom(uint8_t address, uint8_t quantity) { return requestFrom(address, quantity, (uint8_t)1); }
+    virtual uint8_t         requestFrom(int address, int quantity, int sendStop) { return requestFrom((uint8_t)address, (uint8_t)quantity, (uint8_t)(sendStop ? 1 : 0)); }
+    virtual uint8_t         requestFrom(int address, int quantity) { return requestFrom((uint8_t)address, (uint8_t)quantity, (uint8_t)1); 	}
 
 
 //  below here future implementation
     virtual void      beginTransaction(uint32_t baudrate, uint8_t msblsb, uint8_t dataMode); // SPI
     virtual void      endTransaction(); // SPI 
-    virtual void      beginTransmission(uint8_t addr); // I2C
-    virtual void      endTransmission(); // I2C
-    virtual void      requestFrom(uint8_t address, uint8_t bytes); // I2C
     virtual uint8_t   transfer(uint8_t data); // SPI 8bit
     virtual uint16_t  transfer16(uint16_t data); // SPI 16bit
     //virtual void      show(uint8_t pin, CRGB *array, uint16_t array_length); // Fastled
@@ -137,6 +144,7 @@ class SPI_MSTransfer : public Stream {
     volatile uint32_t       _spi_bus_speed;
     volatile uint8_t        chip_select = -1;
     volatile int8_t         eeprom_support = -1;
+    volatile int8_t         wire_port = -1;
     volatile uint8_t        _delay_before_deassertion = 25;
     volatile uint8_t        _transfer_slowdown_while_reading = 0;
     volatile bool           _slave_data_available = 0;
@@ -144,7 +152,6 @@ class SPI_MSTransfer : public Stream {
 
  //  below here future implementation / cleanup
    virtual  uint8_t   status_update();
-    volatile uint8_t   wire_port = -1;
     volatile uint8_t   spi_support = -1;
     volatile uint8_t   fastled_support = -1;
     volatile uint8_t   servo_support = -1;
