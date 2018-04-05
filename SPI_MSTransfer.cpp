@@ -72,16 +72,16 @@ SPI_MSTransfer::SPI_MSTransfer(const char *data, uint8_t cs, SPIClass *SPIWire, 
   else if ( !strcmp(data, "Serial5") ) { _serial_port_identifier = 5; }
   else if ( !strcmp(data, "Serial6") ) { _serial_port_identifier = 6; }
   else if ( !strcmp(data, "EEPROM")  ) { eeprom_support = 1;          }
-
-
-
-
-
-
   else if ( !strcmp(data, "Wire") ) { wire_port = 0; }
   else if ( !strcmp(data, "Wire1") ) { wire_port = 1; }
   else if ( !strcmp(data, "Wire2") ) { wire_port = 2; }
   else if ( !strcmp(data, "Wire3") ) { wire_port = 3; }
+
+
+
+
+
+
   else if ( !strcmp(data, "SPI1") ) { remote_spi_port = 1; }
   else if ( !strcmp(data, "SPI2") ) { remote_spi_port = 2; }
   else if ( !strcmp(data, "SERVO") ) { servo_support = 1; }
@@ -398,6 +398,28 @@ int SPI_MSTransfer::read(void) {
     }
     SPI_deassert(); return -1;
   }
+  if ( wire_port != -1 ) {
+    uint16_t data[5], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0008; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return (int16_t)buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return 0;
+  }
 }
 int SPI_MSTransfer::peek() {
   if ( _slave_access ) return -1;
@@ -422,6 +444,28 @@ int SPI_MSTransfer::peek() {
       }
     }
     SPI_deassert(); return -1;
+  }
+  if ( wire_port != -1 ) {
+    uint16_t data[5], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0009; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return (int16_t)buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return 0;
   }
 }
 int SPI_MSTransfer::available(void) {
@@ -448,6 +492,28 @@ int SPI_MSTransfer::available(void) {
     }
     SPI_deassert(); return 0;
   }
+  if ( wire_port != -1 ) {
+    uint16_t data[5], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0007; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return 0;
+  }
 }
 size_t SPI_MSTransfer::write(const uint8_t *buf, size_t size) {
   if ( _slave_access ) return 0;
@@ -457,6 +523,30 @@ size_t SPI_MSTransfer::write(const uint8_t *buf, size_t size) {
     data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
     data[data_pos] = 0x0004; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
     data[data_pos] = _serial_port_identifier; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = size; checksum ^= data[data_pos]; data_pos++;
+    for ( uint16_t i = 0; i < size; i++ ) { data[data_pos] = buf[i]; checksum ^= data[data_pos]; data_pos++; }
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return 0;
+  }
+  if ( wire_port != -1 ) {
+    uint16_t data[6 + size], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0005; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
     data[data_pos] = size; checksum ^= data[data_pos]; data_pos++;
     for ( uint16_t i = 0; i < size; i++ ) { data[data_pos] = buf[i]; checksum ^= data[data_pos]; data_pos++; }
     data[data_pos] = checksum;
@@ -511,6 +601,61 @@ size_t SPI_MSTransfer::println(const char *p) {
 }
 void SPI_MSTransfer::begin() {
   if ( _slave_access ) {
+
+    // Better to initialize the ports outside the ISR, and before slave is activated.
+
+    //////// Pre-Set UART busses
+    Serial.begin(115200); // usb serial
+    NVIC_SET_PRIORITY(IRQ_USBOTG, 0);
+    Serial1.begin(115200); // 0+1
+    Serial2.begin(115200); // 9+10
+    Serial3.begin(115200); // 7+8
+    NVIC_SET_PRIORITY(IRQ_UART0_STATUS ,0);
+    NVIC_SET_PRIORITY(IRQ_UART1_STATUS ,0);
+    NVIC_SET_PRIORITY(IRQ_UART2_STATUS ,0);
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+    Serial4.begin(115200); // 31+32
+    Serial5.begin(115200); // 33+34
+    Serial6.begin(115200); // 47+48
+    NVIC_SET_PRIORITY(IRQ_UART3_STATUS ,0);
+    NVIC_SET_PRIORITY(IRQ_UART4_STATUS ,0);
+#endif
+#if defined(__MK64FX512__)
+    NVIC_SET_PRIORITY(IRQ_UART5_STATUS, 0);
+#endif
+#if defined(__MK66FX1M0__)
+    NVIC_SET_PRIORITY(IRQ_LPUART0 ,0);
+#endif
+
+    //////// Pre-Set Wire busses
+    Wire.begin(); // pins 18+19
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+    Wire1.begin(); // pins 37+38
+    Wire2.begin(); // pins 3+4
+#endif
+#if defined(__MK66FX1M0__)
+    Wire3.begin(); // pins 56 + 57
+#endif
+
+    //////// Pre-Set SPI busses
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+    SPI1.setSCK(20); SPI1.setMOSI(21); SPI1.setMISO(5); SPI1.begin();
+    SPI2.setSCK(46); SPI2.setMOSI(44); SPI2.setMISO(45); SPI2.begin();
+    SPI1.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0)); // default speed
+    SPI2.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0)); // default speed
+#endif
+
+
+
+    NVIC_SET_PRIORITY(IRQ_I2C0, 0);
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+    NVIC_SET_PRIORITY(IRQ_I2C1, 0);
+    NVIC_SET_PRIORITY(IRQ_I2C2, 0);
+#endif
+#if defined(__MK66FX1M0__)
+    NVIC_SET_PRIORITY(IRQ_I2C3, 0);
+#endif
+
     SIM_SCGC6 |= SIM_SCGC6_SPI0; // enable slave clock
     SPI0_MCR |= SPI_MCR_HALT | SPI_MCR_MDIS; // stop
     SPI0_CTAR0_SLAVE = SPI_CTAR_FMSZ(15) & SPI0_CTAR0_SLAVE & (~(SPI_CTAR_CPOL | SPI_CTAR_CPHA) | 0x00 << 25);
@@ -522,6 +667,29 @@ void SPI_MSTransfer::begin() {
     SPI0_MCR &= ~SPI_MCR_HALT & ~SPI_MCR_MDIS; // start
     NVIC_SET_PRIORITY(IRQ_SPI0, 0); // set priority
     NVIC_ENABLE_IRQ(IRQ_SPI0); // enable CS IRQ
+
+    pinMode(13,OUTPUT); // Enable LED use
+  }
+  if ( wire_port != -1 ) {
+    uint16_t data[4], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0004; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
   }
 }
 int SPI_MSTransfer::read(int addr) {
@@ -780,7 +948,7 @@ void SPI_MSTransfer::analogReadResolution(unsigned int bits) {
 }
 int SPI_MSTransfer::analogRead(uint8_t pin) {
   if ( _slave_access ) return 0;
-  if ( _serial_port_identifier != -1 ) {
+  if ( _master_access ) {
     uint16_t data[5], checksum = 0, data_pos = 0;
     data[data_pos] = 0x7429; checksum ^= data[data_pos]; data_pos++; // HEADER
     data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
@@ -805,7 +973,7 @@ int SPI_MSTransfer::analogRead(uint8_t pin) {
 }
 uint32_t SPI_MSTransfer::analogWriteResolution(uint32_t bits) {
   if ( _slave_access ) return 0;
-  if ( _serial_port_identifier != -1 ) {
+  if ( _master_access ) {
     uint16_t data[6], checksum = 0, data_pos = 0;
     data[data_pos] = 0x7429; checksum ^= data[data_pos]; data_pos++; // HEADER
     data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
@@ -831,7 +999,7 @@ uint32_t SPI_MSTransfer::analogWriteResolution(uint32_t bits) {
 }
 void SPI_MSTransfer::analogWrite(uint8_t pin, int val) {
   if ( _slave_access ) return;
-  if ( _serial_port_identifier != -1 ) {
+  if ( _master_access ) {
     uint16_t data[6], checksum = 0, data_pos = 0;
     data[data_pos] = 0x7429; checksum ^= data[data_pos]; data_pos++; // HEADER
     data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
@@ -853,6 +1021,167 @@ void SPI_MSTransfer::analogWrite(uint8_t pin, int val) {
       }
     }
     SPI_deassert(); return;
+  }
+}
+void SPI_MSTransfer::beginTransmission(uint8_t addr) {
+  if ( _slave_access ) return;
+  if ( wire_port != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0000; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = addr; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          delayMicroseconds(300);
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
+}
+uint8_t SPI_MSTransfer::endTransmission(uint8_t sendStop) {
+  if ( _slave_access ) return -1;
+  if ( wire_port != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0001; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = sendStop; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return -1; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          delay(1); // crashes when lower
+          SPI_deassert(); return (uint8_t)buf[2];
+        }
+      }
+    }
+    SPI_deassert(); return -1;
+  }
+}
+void SPI_MSTransfer::setSDA(uint8_t pin) {
+  if ( _slave_access ) return;
+  if ( wire_port != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0002; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = pin; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
+}
+void SPI_MSTransfer::setSCL(uint8_t pin) {
+  if ( _slave_access ) return;
+  if ( wire_port != -1 ) {
+    uint16_t data[6], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0003; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = pin; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
+}
+void SPI_MSTransfer::setClock(uint32_t frequency) {
+  if ( _slave_access ) return;
+  if ( wire_port != -1 ) {
+    uint16_t data[7], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0006; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = frequency >> 16; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = frequency; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return;
+        }
+      }
+    }
+    SPI_deassert(); return;
+  }
+}
+uint8_t SPI_MSTransfer::requestFrom(uint8_t address, uint8_t length, uint8_t sendStop) {
+  if ( _slave_access ) return -1;
+  if ( wire_port != -1 ) {
+    uint16_t data[8], checksum = 0, data_pos = 0;
+    data[data_pos] = 0x66AA; checksum ^= data[data_pos]; data_pos++; // HEADER
+    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+    data[data_pos] = 0x0010; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+    data[data_pos] = wire_port; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = address; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = length; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = sendStop; checksum ^= data[data_pos]; data_pos++;
+    data[data_pos] = checksum;
+    SPI_assert();
+    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+    if ( !command_ack_response(data, sizeof(data) / 2) ) return -1; // RECEIPT ACK
+    for ( uint16_t i = 0; i < 3000; i++ ) {
+      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+        if ( checksum == buf[buf[1] - 1] ) {
+          spi_port->transfer16(0xD0D0); // send confirmation
+          SPI_deassert(); return data[2];
+        }
+      }
+    }
+    SPI_deassert(); return -1;
   }
 }
 
@@ -885,14 +1214,6 @@ void SPI_MSTransfer::analogWrite(uint8_t pin, int val) {
 
 
 
-
-
-void SPI_MSTransfer::beginTransmission(uint8_t addr) {
-}
-void SPI_MSTransfer::endTransmission() {
-}
-void SPI_MSTransfer::requestFrom(uint8_t address, uint8_t bytes) {
-}
 uint8_t SPI_MSTransfer::transfer(uint8_t data) {
 }
 uint16_t SPI_MSTransfer::transfer16(uint16_t data) {
@@ -1682,12 +2003,348 @@ void spi0_isr(void) {
                 }
                 SPI0_SR |= SPI_SR_RFDF; return;
               }
+          }
+          SPI0_SR |= SPI_SR_RFDF; return;
+        } // END OF ANALOG SECTION
+
+
+      case 0x66AA: { // WIRE SECTION
+          switch ( data[2] ) {
+            case 0x0000: {
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      Wire.beginTransmission((uint8_t)data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      Wire1.beginTransmission((uint8_t)data[4]); break;
+                    }
+                  case 0x0002: {
+                      Wire2.beginTransmission((uint8_t)data[4]); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      Wire3.beginTransmission((uint8_t)data[4]); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0001: {
+                uint8_t val;
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      val = Wire.endTransmission((uint8_t)data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      val = Wire1.endTransmission((uint8_t)data[4]); break;
+                    }
+                  case 0x0002: {
+                      val = Wire2.endTransmission((uint8_t)data[4]); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      val = Wire3.endTransmission((uint8_t)data[4]); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, (uint16_t)val, checksum ^= (uint16_t)val };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0002: {
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      Wire.setSDA((uint8_t)data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      Wire1.setSDA((uint8_t)data[4]); break;
+                    }
+                  case 0x0002: {
+                      Wire2.setSDA((uint8_t)data[4]); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      Wire3.setSDA((uint8_t)data[4]); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0003: {
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      Wire.setSCL((uint8_t)data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      Wire1.setSCL((uint8_t)data[4]); break;
+                    }
+                  case 0x0002: {
+                      Wire2.setSCL((uint8_t)data[4]); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      Wire3.setSCL((uint8_t)data[4]); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0004: {
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      Wire.begin(); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      Wire1.begin(); break;
+                    }
+                  case 0x0002: {
+                      Wire2.begin(); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      Wire3.begin(); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0005: {
+                uint16_t _written = 0; uint8_t _buf[data[4]];
+                for ( uint16_t i = 0; i < data[4]; i++ ) _buf[i] = data[i + 5];
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      _written = Wire.write(_buf, (uint8_t)data[4]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      _written = Wire1.write(_buf, (uint8_t)data[4]); break;
+                    }
+                  case 0x0002: {
+                      _written = Wire2.write(_buf, (uint8_t)data[4]); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      _written = Wire3.write(_buf, (uint8_t)data[4]); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, _written, checksum ^= _written };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0006: {
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      Wire.setClock(((uint32_t)data[4] << 16 | data[5])); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      Wire1.setClock(((uint32_t)data[4] << 16 | data[5])); break;
+                    }
+                  case 0x0002: {
+                      Wire2.setClock(((uint32_t)data[4] << 16 | data[5])); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      Wire3.setClock(((uint32_t)data[4] << 16 | data[5])); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0, buf_pos = 0, buf[3] = { 0xAA55, 3, 0xAA56 };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0007: {
+                int16_t val;
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      val = Wire.available(); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      val = Wire1.available(); break;
+                    }
+                  case 0x0002: {
+                      val = Wire2.available(); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      val = Wire3.available(); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, (uint16_t)val, checksum ^= (uint16_t)val };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0008: {
+                int16_t val;
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      val = Wire.read(); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      val = Wire1.read(); break;
+                    }
+                  case 0x0002: {
+                      val = Wire2.read(); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      val = Wire3.read(); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, (uint16_t)val, checksum ^= (uint16_t)val };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0009: {
+                int16_t val;
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      val = Wire.peek(); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      val = Wire1.peek(); break;
+                    }
+                  case 0x0002: {
+                      val = Wire2.peek(); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      val = Wire3.peek(); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, (uint16_t)val, checksum ^= (uint16_t)val };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+            case 0x0010: {
+                uint8_t val;
+                switch ( data[3] ) {
+                  case 0x0000: {
+                      val = Wire.requestFrom(data[4],data[5],data[6]); break;
+                    }
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+                  case 0x0001: {
+                      val = Wire1.requestFrom(data[4],data[5],data[6]); break;
+                    }
+                  case 0x0002: {
+                      val = Wire2.requestFrom(data[4],data[5],data[6]); break;
+                    }
+#endif
+#if defined(__MK66FX1M0__)
+                  case 0x0003: {
+                      val = Wire3.requestFrom(data[4],data[5],data[6]); break;
+                    }
+#endif
+                }
+                uint16_t checksum = 0xAA51, buf_pos = 0, buf[] = { 0xAA55, 4, (uint16_t)val, checksum ^= (uint16_t)val };
+                while ( !(GPIOD_PDIR & 0x01) ) {
+                  if ( SPI0_SR & 0xF0 ) {
+                    SPI0_PUSHR_SLAVE = buf[ ( buf_pos > buf[1] ) ? buf_pos = 0 : buf_pos++];
+                    if ( SPI0_POPR == 0xD0D0 ) break;
+                  }
+                }
+                SPI0_SR |= SPI_SR_RFDF; return;
+              }
+
+
+
+
+
 
 
 
           }
           SPI0_SR |= SPI_SR_RFDF; return;
-        } // END OF ANALOG SECTION
+        } // END OF WIRE SECTION
+
+
+
+
+
+
+
+
+
 
 
 
