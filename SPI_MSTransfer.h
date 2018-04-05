@@ -42,7 +42,7 @@
 #include <EEPROM.h>
 
 #define DATA_BUFFER_MAX 200
-#define QUEUE_SLOTS 12
+#define QUEUE_SLOTS 16
 
 struct AsyncMST {
   uint16_t packetID = 0;
