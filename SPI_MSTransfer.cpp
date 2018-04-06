@@ -2495,7 +2495,7 @@ uint16_t SPI_MSTransfer::events(uint32_t MinTime) {
         if ( odd_or_even ) buf[sizeof(buf)-1] = array[array[1]-2];
         if ( _slave_handler_uint8_t != nullptr ) _slave_handler_uint8_t(buf, array[3], info);
       }
-      else if ( array[0] == 0x9244 | array[0] == 0x9243 ) {
+      else if ( array[0] == 0x9244 || array[0] == 0x9243 ) {
         uint16_t checksum = 0, buf_pos = 0, buf[array[3]]; AsyncMST info; info.packetID = array[4];
         for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
         ( checksum == array[array[1]-1] ) ? info.error = 0 : info.error = 1;
