@@ -2480,7 +2480,9 @@ uint16_t SPI_MSTransfer::events(uint32_t MinTime) {
     }
     if ( mtsca.size() > 0 ) {
       uint16_t array[mtsca.front()[1]];
+      NVIC_DISABLE_IRQ(IRQ_SPI0);
       mtsca.pop_front(array,sizeof(array)/2 );
+      NVIC_ENABLE_IRQ(IRQ_SPI0);
       if ( array[0] == 0x9254 || array[0] == 0x9253 ) {
         uint16_t checksum = 0, buf_pos = 0; AsyncMST info; info.packetID = array[4];
         for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
