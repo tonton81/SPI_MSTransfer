@@ -46,8 +46,8 @@ _master_handler_ptr_uint8_t SPI_MSTransfer::_master_handler_uint8_t = nullptr;
 bool SPI_MSTransfer::watchdogEnabled = 0;
 uint32_t SPI_MSTransfer::watchdogFeedInterval = millis();
 uint32_t SPI_MSTransfer::watchdogTimeout = 0;
-Circular_Buffer<uint16_t, QUEUE_SLOTS, DATA_BUFFER_MAX> SPI_MSTransfer::mtsca;
-Circular_Buffer<uint16_t, QUEUE_SLOTS, DATA_BUFFER_MAX> SPI_MSTransfer::stmca;
+Circular_Buffer<uint16_t, SPI_MST_QUEUE_SLOTS, SPI_MST_DATA_BUFFER_MAX> SPI_MSTransfer::mtsca;
+Circular_Buffer<uint16_t, SPI_MST_QUEUE_SLOTS, SPI_MST_DATA_BUFFER_MAX> SPI_MSTransfer::stmca;
 
 
 void SPI_MSTransfer::onTransfer(_slave_handler_ptr handler) {
@@ -1315,12 +1315,12 @@ SPI_MSTransfer::SPI_MSTransfer(const char *data, const char *mode) {
 }
 
 void spi0_isr(void) {
-  static uint16_t data[DATA_BUFFER_MAX];
+  static uint16_t data[SPI_MST_DATA_BUFFER_MAX];
   uint16_t buffer_pos = 0, len = 0, process_crc = 0;
   while ( !(GPIOD_PDIR & 0x01) ) {
     if ( SPI0_SR & 0xF0 ) {
       SPI0_PUSHR_SLAVE = 0xDEAF; data[buffer_pos] = SPI0_POPR; buffer_pos++;
-      if ( buffer_pos >= DATA_BUFFER_MAX ) break; // BUFFER LENGTH PROTECTION
+      if ( buffer_pos >= SPI_MST_DATA_BUFFER_MAX ) break; // BUFFER LENGTH PROTECTION
     }
     if ( data[1] && buffer_pos >= data[1] ) break;
   }
