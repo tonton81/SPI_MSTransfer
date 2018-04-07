@@ -41,8 +41,8 @@
 #include "circular_buffer.h"
 #include <EEPROM.h>
 
-#define DATA_BUFFER_MAX 200
-#define QUEUE_SLOTS 16
+#define DATA_BUFFER_MAX 400
+#define QUEUE_SLOTS 8
 
 struct AsyncMST {
   uint16_t packetID = 0;
