@@ -39,7 +39,6 @@ typedef enum {
 
 class BaroSensorClass {
  public:
-  BaroSensorClass();
   void begin(SPI_MSTransfer &serial);
 
   /* Return temperature in C or Fahrenheit */
