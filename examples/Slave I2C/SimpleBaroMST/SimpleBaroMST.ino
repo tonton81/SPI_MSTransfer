@@ -47,9 +47,9 @@ void setup()
   #endif
   SPI_MST_BUS.begin();
 
-  sWire.begin(100000);
+  sWire.begin();
 
-  delay(5000);
+  delay(2500);
   I2Cscan();
   delay(2500);
   
@@ -145,19 +145,7 @@ void loop()
     Serial.print("Digital temperature value = "); Serial.print(9.*(float) Temperature/5. + 32., 2); Serial.println(" F"); // temperature in degrees Fahrenheit
     Serial.print("Digital pressure value = "); Serial.print((float) Pressure, 2);  Serial.println(" mbar");// pressure in millibar
     Serial.print("Altitude = "); Serial.print(altitude, 2); Serial.println(" feet");
-
-    Serial.print("F&F (OT=");
-    Serial.print( OverTime );
-    Serial.print(")");
-    _time = micros() - _time;
-    Serial.print(" OT_CALC==");
-    Serial.print(OT_CALC);
-    Serial.print("  micros() _time==");
-    Serial.println(_time);
-    if ( _time > OT_CALC ) OverTime++;
-
-   Serial.println();  Serial.println();
-  
+    Serial.println();  
   }
   teensy_gpio.events();
   sWire.events();
@@ -250,44 +238,37 @@ unsigned char MS5637checkCRC(uint16_t * n_prom)  // calculate checksum from PROM
 
 // I2C scan function
 
-void I2Cscan()
-{
-// scan for i2c devices
+void I2Cscan() {
+  //Taken from Onehorse's MS5637 implementation  
+  // scan for i2c devices
   byte error, address;
   int nDevices;
 
   Serial.println("Scanning...");
-
   nDevices = 0;
-  for(address = 1; address < 127; address++ ) 
-  {
+  for (address = 1; address < 127; address++ ) {
     // The i2c_scanner uses the return value of
     // the Write.endTransmisstion to see if
     // a device did acknowledge to the address.
     sWire.beginTransmission(address);
     error = sWire.endTransmission();
 
-    if (error == 0)
-    {
+    if (error == 0) {
       Serial.print("I2C device found at address 0x");
-      if (address<16) 
-        Serial.print("0");
-      Serial.print(address,HEX);
+      if (address < 16) Serial.print("0");
+      Serial.print(address, HEX);
       Serial.println("  !");
-
       nDevices++;
     }
-    else if (error==4) 
-    {
+    else if (error == 4) {
       Serial.print("Unknow error at address 0x");
-      if (address<16) 
-        Serial.print("0");
-      Serial.println(address,HEX);
-    }    
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+    }
   }
-  if (nDevices == 0){
-    Serial.println("No I2C devices found\n");
-    while(1){};
+  if (nDevices == 0) {
+    Serial.println("No I2C devices found");
+    Serial.println("Check Wiring !\n");
   } else {
     Serial.println("done\n");
   }

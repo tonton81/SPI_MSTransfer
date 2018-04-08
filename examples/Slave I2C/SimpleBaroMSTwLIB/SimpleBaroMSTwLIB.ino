@@ -22,9 +22,8 @@ void setup()
   #endif
   SPI_MST_BUS.begin();
   
-  sWire.begin(100000);
+  sWire.begin();
 
-  BaroSensor.begin(sWire);
   BaroSensor.I2Cscan();
   BaroSensor.begin(sWire);
   BaroSensor.dumpDebugOutput();

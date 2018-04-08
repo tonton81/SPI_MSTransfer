@@ -13,7 +13,7 @@
   #define SPI_SPD       30000000
   
   // TViewer Declares
-  #define TViewerSPI     1
+  //#define TViewerSPI     1
 
   // IMU Declares ----------------------------------
   #define IMU_BUS      Wire  //Wire // SPI
@@ -31,7 +31,7 @@
   // Serial Declares --------------------------------
   #define cout        Serial
   #define cout_BAUD   115200
-  #define coutD       Serial  //Serial4  // Serial2
+  //#define coutD       Serial  //Serial4  // Serial2
   #define coutD_BAUD  2000000  // coutD for DEBUG port
   
   //---- GPS Declares -------------------------------
