@@ -34,20 +34,21 @@
 #ifndef _SPI_MSTransfer_H_
 #define _SPI_MSTransfer_H_
 
+#ifndef SPI_MST_DATA_BUFFER_MAX
+#define SPI_MST_DATA_BUFFER_MAX 400
+#endif
+
+#ifndef SPI_MST_QUEUE_SLOTS
+#define SPI_MST_QUEUE_SLOTS 16
+#endif
+
+
 #include "Stream.h"
 #include <SPI.h>
 #include <i2c_t3.h>
 //#include <FastLED.h>
 #include "circular_buffer.h"
 #include <EEPROM.h>
-
-#ifndef SPI_MST_DATA_BUFFER_MAX
-#define SPI_MST_DATA_BUFFER_MAX 400
-#endif
-
-#ifndef SPI_MST_QUEUE_SLOTS
-#define SPI_MST_QUEUE_SLOTS 8
-#endif
 
 struct AsyncMST {
   uint16_t packetID = 0;
@@ -72,8 +73,8 @@ class SPI_MSTransfer : public Stream {
     virtual bool            digitalReadFast(uint8_t pin);
     virtual void            pinMode(uint8_t pin, uint8_t state);
     virtual void            pinToggle(uint8_t pin);
-    virtual uint8_t         transfer(uint8_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget = 0);
-    virtual uint16_t        transfer16(uint16_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget = 0);
+    virtual uint8_t         transfer(uint8_t *buffer, uint16_t length, uint16_t packetID, uint8_t fire_and_forget = 0);
+    virtual uint16_t        transfer16(uint16_t *buffer, uint16_t length, uint16_t packetID, uint8_t fire_and_forget = 0);
     virtual uint16_t        events(uint32_t MinTime = 100);
     virtual void            onTransfer(_slave_handler_ptr handler);
     virtual void            onTransfer(_slave_handler_ptr_uint8_t handler);
@@ -120,6 +121,8 @@ class SPI_MSTransfer : public Stream {
     virtual uint8_t         requestFrom(uint8_t address, uint8_t quantity) { return requestFrom(address, quantity, (uint8_t)1); }
     virtual uint8_t         requestFrom(int address, int quantity, int sendStop) { return requestFrom((uint8_t)address, (uint8_t)quantity, (uint8_t)(sendStop ? 1 : 0)); }
     virtual uint8_t         requestFrom(int address, int quantity) { return requestFrom((uint8_t)address, (uint8_t)quantity, (uint8_t)1); 	}
+    volatile bool           _slave_processing_busy = 0;
+    volatile uint32_t       _slave_processing_selftimer = 0;
 
 
 //  below here future implementation
@@ -153,10 +156,10 @@ class SPI_MSTransfer : public Stream {
     volatile uint8_t        _delay_before_deassertion = 25;
     volatile uint8_t        _transfer_slowdown_while_reading = 0;
     volatile bool           _slave_data_available = 0;
-
+    volatile bool           _run_queue_flag = 0;
 
  //  below here future implementation / cleanup
-   virtual  uint8_t   status_update();
+    virtual  uint8_t   status_update();
     volatile uint8_t   spi_support = -1;
     volatile uint8_t   fastled_support = -1;
     volatile uint8_t   servo_support = -1;
@@ -164,4 +167,5 @@ class SPI_MSTransfer : public Stream {
     volatile uint8_t   remote_spi_port = -1;
 
 };
+
 #endif
