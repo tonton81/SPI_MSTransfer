@@ -30,7 +30,6 @@
   SOFTWARE.
 */
 
-
 #include <SPI_MSTransfer.h>
 #include "Stream.h"
 #include <SPI.h>
@@ -91,6 +90,9 @@ SPI_MSTransfer::SPI_MSTransfer(const char *data, uint8_t cs, SPIClass *SPIWire, 
 
 void SPI_MSTransfer::debug(Stream &serial) {
   debugSerial = &serial;
+  Serial.print("DBG: [S_CS "); Serial.print(chip_select);
+  Serial.print("] CB Capacity: "); Serial.print(mtsca.capacity());
+  Serial.print(" Length: "); Serial.println(mtsca.max_size());
 }
 void SPI_MSTransfer::SPI_assert() {
   spi_port->beginTransaction(SPISettings(_spi_bus_speed, MSBFIRST, SPI_MODE0)); ::digitalWriteFast(chip_select, LOW);
@@ -104,25 +106,24 @@ bool SPI_MSTransfer::command_ack_response(uint16_t *data, uint32_t len) {
     if ( _crc == 0xF00D ) {
       spi_port->transfer16(0xBEEF); break;
     }
-    else if ( _crc == 0xBAAD ) {
-      spi_port->transfer16(0xBEEF); SPI_deassert(); return 0;
-    }
-    else if ( _crc == 0xADD0 ) _slave_data_available = 1;
-
-    if ( micros() - timeout > 1000 ) {
+    else if ( _crc == 0xBAAD || micros() - timeout > 1000 ) {
       resend_count++;
       if ( resend_count > 3 ) {
         if ( debugSerial != nullptr ) {
           Serial.print("DBG: [S_CS "); Serial.print(chip_select);
           Serial.print("] FAIL_RES #"); Serial.print(resend_count);
-          Serial.print(" Tx ABORT. "); delay(1000);
+          Serial.println(" Tx ABORT. "); delay(1000);
         }
-        break;
+        SPI_deassert(); return 0;
       }
       if ( debugSerial != nullptr ) {
         Serial.print("FAIL_Res #"); Serial.print(resend_count);
-        Serial.print(" RETRY..."); delay(1000);
+        Serial.println(" RETRY..."); delay(1000);
       }
+      spi_port->transfer16(0xBEEF);
+      SPI_deassert();
+      SPI_assert();
+      for ( uint16_t i = 0; i < len; i++ ) { spi_port->transfer16(data[i]); }
       timeout = micros();
     }
   }
@@ -223,7 +224,7 @@ void SPI_MSTransfer::pinToggle(uint8_t pin) { // code written by defragster
   }
   SPI_deassert(); return;
 }
-uint8_t SPI_MSTransfer::transfer(uint8_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget) {
+uint8_t SPI_MSTransfer::transfer(uint8_t *buffer, uint16_t length, uint16_t packetID, uint8_t fire_and_forget) {
   if ( _slave_access ) {
     uint16_t len = ( !(length % 2) ) ? ( length / 2 ) : ( length / 2 ) + 1;
     uint16_t data[6 + len], checksum = 0, data_pos = 0;
@@ -273,7 +274,7 @@ uint8_t SPI_MSTransfer::transfer(uint8_t *buffer, uint16_t length, uint16_t pack
       }
     }
     data[data_pos] = checksum;
-    if ( fire_and_forget ) {
+    if ( fire_and_forget == 1 ) {
       SPI_assert();
       for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
       uint32_t timeout = millis();
@@ -281,6 +282,10 @@ uint8_t SPI_MSTransfer::transfer(uint8_t *buffer, uint16_t length, uint16_t pack
       spi_port->transfer16(0xD0D0); // send confirmation
       SPI_deassert();
       return data[4]; // F&F, RETURN PACKETID
+    }
+    else if ( fire_and_forget == 2 ) {
+      mtsca.push_back(data, data[1]);
+      return 0;
     }
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
@@ -299,7 +304,7 @@ uint8_t SPI_MSTransfer::transfer(uint8_t *buffer, uint16_t length, uint16_t pack
   }
   return 0;
 }
-uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t packetID, bool fire_and_forget) {
+uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t packetID, uint8_t fire_and_forget) {
   if ( _slave_access ) {
     uint16_t data[6 + length], checksum = 0, data_pos = 0;
     data[data_pos] = 0xAA55; checksum ^= data[data_pos]; data_pos++; // HEADER
@@ -321,7 +326,7 @@ uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t 
     data[data_pos] = packetID; checksum ^= data[data_pos]; data_pos++;
     for ( uint16_t i = 0; i < length; i++ ) { data[data_pos] = buffer[i]; checksum ^= data[data_pos]; data_pos++; }
     data[data_pos] = checksum;
-    if ( fire_and_forget ) {
+    if ( fire_and_forget == 1 ) {
       SPI_assert();
       for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
       uint32_t timeout = millis();
@@ -329,6 +334,10 @@ uint16_t SPI_MSTransfer::transfer16(uint16_t *buffer, uint16_t length, uint16_t 
       spi_port->transfer16(0xD0D0); // send confirmation
       SPI_deassert();
       return data[4]; // F&F, RETURN PACKETID
+    }
+    else if ( fire_and_forget == 2 ) {
+      mtsca.push_back(data, data[1]);
+      return 0;
     }
     SPI_assert();
     for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
@@ -665,7 +674,7 @@ void SPI_MSTransfer::begin() {
     CORE_PIN12_CONFIG = PORT_PCR_MUX(2);
     CORE_PIN2_CONFIG =  PORT_PCR_PS | PORT_PCR_MUX(2); // this uses pin 2 for the CS so Serial2 can be used instead.
     SPI0_MCR &= ~SPI_MCR_HALT & ~SPI_MCR_MDIS; // start
-    NVIC_SET_PRIORITY(IRQ_SPI0, 0); // set priority
+    NVIC_SET_PRIORITY(IRQ_SPI0, 1); // set priority
     NVIC_ENABLE_IRQ(IRQ_SPI0); // enable CS IRQ
 
     pinMode(13,OUTPUT); // Enable LED use
@@ -1327,11 +1336,13 @@ void spi0_isr(void) {
 
   if ( data[1] && buffer_pos >= data[1] ) {
     len = data[1];
+    static bool _swap = 1;
 
 
     /* F&F BLOCK START */
     if ( data[0] == 0x9244 || data[0] == 0x9254 ) {
       _slave_pointer->SPI_MSTransfer::mtsca.push_back(data, len);
+      _slave_pointer->SPI_MSTransfer::_slave_processing_selftimer = millis();
       while ( !(GPIOD_PDIR & 0x01) ) { // wait here until MASTER confirms F&F receipt
         if ( SPI0_SR & 0xF0 ) {
           SPI0_PUSHR_SLAVE = 0xBABE;
@@ -1345,11 +1356,55 @@ void spi0_isr(void) {
     /* F&F BLOCK END */
 
 
+
+    /* QUEUE RUN BLOCK START */
+    if ( data[0] == 0x99BB ) {
+      _slave_pointer->SPI_MSTransfer::_slave_processing_busy = 1;
+      _slave_pointer->SPI_MSTransfer::_slave_processing_selftimer = millis();
+      while ( !(GPIOD_PDIR & 0x01) ) { // wait here until MASTER confirms F&F receipt
+        if ( SPI0_SR & 0xF0 ) {
+          SPI0_PUSHR_SLAVE = 0xBABE;
+          if ( SPI0_POPR == 0xD0D0 ) {
+            SPI0_SR |= SPI_SR_RFDF; return;
+          }
+        }
+      }
+      SPI0_SR |= SPI_SR_RFDF; return;
+    }
+    /* QUEUE RUN BLOCK END */
+
+
+
+    /* STATUS BLOCK START */
+    if ( data[0] == 0x98BB && data[2] == 0x98B8 ) {
+      _swap = 1;
+      while ( !(GPIOD_PDIR & 0x01) ) { // wait here until MASTER confirms STATUS receipt
+        if ( SPI0_SR & 0xF0 ) {
+          if ( _swap ) {
+            _swap = 0;
+            uint16_t _notify_status = 0xAD00;
+            if ( _slave_pointer->SPI_MSTransfer::stmca.size() ) _notify_status |= 1 << 0;
+            if ( _slave_pointer->SPI_MSTransfer::mtsca.size() ) _notify_status |= 1 << 1;
+            SPI0_PUSHR_SLAVE = _notify_status;
+            SPI0_POPR;
+          }
+          else {
+            _swap = 0;
+            SPI0_PUSHR_SLAVE = 0xBABE;
+            if ( SPI0_POPR == 0xD0D0 ) {
+              SPI0_SR |= SPI_SR_RFDF; return;
+            }
+          }
+        }
+      }
+      SPI0_SR |= SPI_SR_RFDF; return;
+    }
+    /* STATUS BLOCK END */
+
+
     /* BEGIN PROCESSING */
 
     for ( uint16_t i = 0; i < len - 1; i++ ) process_crc ^= data[i];
-
-    static bool _swap = 1; _swap = 1;
     while ( 1 ) { // wait here until MASTER confirms ACK receipt
       if ( !(GPIOD_PDIR & 0x01) ) {
         if ( SPI0_SR & 0xF0 ) {
@@ -1357,16 +1412,8 @@ void spi0_isr(void) {
             SPI0_PUSHR_SLAVE = 0xBAAD; SPI0_POPR;
           }
           else {
-            if ( _swap && _slave_pointer->SPI_MSTransfer::stmca.size() > 0 ) {
-              _swap = 0;
-              SPI0_PUSHR_SLAVE = 0xADD0;
-              SPI0_POPR;
-            }
-            else {
-              _swap = 0;
-              SPI0_PUSHR_SLAVE = 0xF00D;
-              if ( SPI0_POPR == 0xBEEF ) break;
-            }
+            SPI0_PUSHR_SLAVE = 0xF00D;
+            if ( SPI0_POPR == 0xBEEF ) break;
           }
         }
       }
@@ -1374,6 +1421,7 @@ void spi0_isr(void) {
         SPI0_SR |= SPI_SR_RFDF; return;
       }
     }
+
 
     if ( data[len - 1] != process_crc ) {
       if ( _slave_pointer->SPI_MSTransfer::debugSerial != nullptr ) {
@@ -1385,12 +1433,14 @@ void spi0_isr(void) {
       SPI0_SR |= SPI_SR_RFDF; return; // CRC FAILED, DON'T PROCESS!
     }
 
+
     if ( _slave_pointer->SPI_MSTransfer::debugSerial != nullptr ) {
       Serial.print("DEBUG: [DATA] ");
       for ( uint16_t i = 0; i < len; i++ ) {
         Serial.print(data[i], HEX); Serial.print(" ");
       } Serial.println(); Serial.flush();
     }
+
 
     switch ( data[0] ) {
       case 0x9766: {
@@ -2423,66 +2473,136 @@ void SPI_MSTransfer::_detect() {
 }
 uint16_t SPI_MSTransfer::events(uint32_t MinTime) {
   if ( _master_access ) {
-    if ( !_slave_data_available ) return 0;
-    static uint32_t LastTime = 0;
-    if ( millis() - LastTime < MinTime ) return 0;
-    LastTime = millis();
 
-    uint16_t data[4], checksum = 0, data_pos = 0;
-    data[data_pos] = 0x9712; checksum ^= data[data_pos]; data_pos++; // HEADER
-    data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
-    data[data_pos] = 0x0000; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
-    data[data_pos] = checksum;
-    SPI_assert();
-    for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
-    if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
-    for ( uint16_t i = 0; i < 3000; i++ ) {
-      if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
-        uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
-        for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
-        if ( checksum == buf[buf[1] - 1] ) {
-          if ( buf[1] > 4 ) {
-            if ( buf[2] == 0x001 ) {
-              bool odd_or_even = ( (buf[3] % 2) );
-              uint8_t _slave_array[buf[3]];
-              for ( uint16_t i = 0, j = 0; i < buf[3]/2; i++ ) {
-                _slave_array[j] = buf[5+i] >> 8;
-                _slave_array[j+1] = (uint8_t)buf[5+i];
-                j+=2;
-              }
-              if ( odd_or_even ) _slave_array[sizeof(_slave_array)-1] = buf[buf[1]-2];
-              AsyncMST info; info.packetID = buf[4]; info.slave = chip_select;
-              _master_handler_uint8_t(_slave_array, buf[3], info);
-              spi_port->transfer16(0xD0D0); // send confirmation
-              SPI_deassert(); return 0x00A6;
-            }
-            else if ( buf[2] == 0x000 ) {
-              uint16_t _slave_array[buf[3]];
-              memmove (&_slave_array[0], &buf[5], buf[3] * 2 );
-              AsyncMST info; info.packetID = buf[4]; info.slave = chip_select;
-              _master_handler(_slave_array, buf[3], info);
-              spi_port->transfer16(0xD0D0); // send confirmation
-              SPI_deassert(); return 0x00A6;
-            }
-          }
-          _slave_data_available = 0;
-          spi_port->transfer16(0xD0D0); // send confirmation
-          SPI_deassert(); return 0;
+    static uint32_t LastTime = 0;
+    if ( micros() - LastTime < MinTime ) return 0;
+    LastTime = micros();
+
+
+    /* CHECK STATUS FLAGS */
+
+      uint16_t data[3], checksum = 0, data_pos = 0;
+      data[data_pos] = 0x98BB; checksum ^= data[data_pos]; data_pos++; // HEADER
+      data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+      data[data_pos] = checksum;
+      SPI_assert();
+      for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+      uint32_t timeout = millis();
+      uint16_t value = 0;
+      while ( ( value = spi_port->transfer16(0xFFFF) ) != 0xBABE && millis() - timeout < 100 ) {
+        if ( value >> 8 == 0xAD ) {
+          ( value >> 0 & 0x01 ) ? _slave_data_available = 1 : _slave_data_available = 0;
+          ( value >> 1 & 0x01 ) ? _slave_processing_busy = 1 : _slave_processing_busy = 0;
         }
       }
+      spi_port->transfer16(0xD0D0); // send confirmation
+      SPI_deassert();
+
+
+    /* TRANSFER SYSTEM QUEUES */
+
+  if ( !_slave_processing_busy ) {
+    while ( mtsca.size() ) {
+      if ( debugSerial != nullptr ) {
+        if ( mtsca.size() == mtsca.capacity() ) {
+          Serial.print("DBG: [S_CS "); Serial.print(chip_select);
+          Serial.println("] F&F MAX QUEUE REACHED");
+        }
+        else {
+          Serial.print("DBG: [S_CS "); Serial.print(chip_select);
+          Serial.print("] ");
+          Serial.print(mtsca.size());
+          Serial.print("/");
+          Serial.print(mtsca.capacity());
+          Serial.println(" DEQUEUE(S) LEFT");
+        }
+      }
+      SPI_assert();
+      uint16_t buffer[mtsca.peek_front()[1]];
+      mtsca.pop_front(buffer,sizeof(buffer)/2);
+      for ( uint16_t i = 0; i < buffer[1]; i++ ) { spi_port->transfer16(buffer[i]); }
+      uint32_t timeout = millis();
+      while ( spi_port->transfer16(0xFFFF) != 0xBABE && millis() - timeout < 100 );
+      spi_port->transfer16(0xD0D0); // send confirmation
+      SPI_deassert();
     }
-    SPI_deassert(); return 0;
+    { // SEND SIGNAL TO START PROCESSING
+      uint16_t data[3], checksum = 0, data_pos = 0;
+      data[data_pos] = 0x99BB; checksum ^= data[data_pos]; data_pos++; // HEADER
+      data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+      data[data_pos] = checksum;
+      SPI_assert();
+      for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+      uint32_t timeout = millis();
+      while ( spi_port->transfer16(0xFFFF) != 0xBABE && millis() - timeout < 100 );
+      spi_port->transfer16(0xD0D0); // send confirmation
+      SPI_deassert();
+    }
   }
+
+
+
+
+    /* GET CALLBACKS FROM SLAVE */
+    if ( _slave_data_available ) {
+      uint16_t data[4], checksum = 0, data_pos = 0;
+      data[data_pos] = 0x9712; checksum ^= data[data_pos]; data_pos++; // HEADER
+      data[data_pos] = sizeof(data) / 2; checksum ^= data[data_pos]; data_pos++; // DATA SIZE
+      data[data_pos] = 0x0000; checksum ^= data[data_pos]; data_pos++; // SUB SWITCH STATEMENT
+      data[data_pos] = checksum;
+      SPI_assert();
+      for ( uint16_t i = 0; i < data[1]; i++ ) { spi_port->transfer16(data[i]); }
+      if ( !command_ack_response(data, sizeof(data) / 2) ) return 0; // RECEIPT ACK
+      for ( uint16_t i = 0; i < 3000; i++ ) {
+        if ( spi_port->transfer16(0xFFFF) == 0xAA55 ) {
+          uint16_t buf[spi_port->transfer16(0xFFFF)]; buf[0] = 0xAA55; buf[1] = sizeof(buf) / 2; checksum = buf[0]; checksum ^= buf[1];
+          for ( uint16_t i = 2; i < buf[1]; i++ ) { delayMicroseconds(_transfer_slowdown_while_reading); buf[i] = spi_port->transfer16(0xFFFF); if ( i < buf[1] - 1 ) checksum ^= buf[i]; }
+          if ( checksum == buf[buf[1] - 1] ) {
+            if ( buf[1] > 4 ) {
+              if ( buf[2] == 0x0001 ) {
+                bool odd_or_even = ( (buf[3] % 2) );
+                uint8_t _slave_array[buf[3]];
+                for ( uint16_t i = 0, j = 0; i < buf[3]/2; i++ ) {
+                  _slave_array[j] = buf[5+i] >> 8;
+                  _slave_array[j+1] = (uint8_t)buf[5+i];
+                  j+=2;
+                }
+                if ( odd_or_even ) _slave_array[sizeof(_slave_array)-1] = buf[buf[1]-2];
+                AsyncMST info; info.packetID = buf[4]; info.slave = chip_select;
+                _master_handler_uint8_t(_slave_array, buf[3], info);
+                spi_port->transfer16(0xD0D0); // send confirmation
+                SPI_deassert(); return 0x00A6;
+              }
+              else if ( buf[2] == 0x0000 ) {
+                uint16_t _slave_array[buf[3]];
+                memmove (&_slave_array[0], &buf[5], buf[3] * 2 );
+                AsyncMST info; info.packetID = buf[4]; info.slave = chip_select;
+                _master_handler(_slave_array, buf[3], info);
+                spi_port->transfer16(0xD0D0); // send confirmation
+                SPI_deassert(); return 0x00A6;
+              }
+            }
+            spi_port->transfer16(0xD0D0); // send confirmation
+            SPI_deassert(); return 0;
+          }
+        }
+      }
+      SPI_deassert();
+    }
+  }
+
+
+
   if ( _slave_access ) {
     if ( watchdogEnabled && millis() - watchdogFeedInterval > ( watchdogTimeout / 4 ) ) {
       watchdogFeedInterval = millis();
       __disable_irq(); WDOG_REFRESH = 0xA602; WDOG_REFRESH = 0xB480; __enable_irq();
     }
-    if ( mtsca.size() > 0 ) {
+    if ( !mtsca.size() ) _slave_processing_busy = 0;
+    if ( !_slave_processing_busy && mtsca.size() && _slave_processing_selftimer > 500 ) _slave_processing_busy = 1;
+    if ( _slave_processing_busy && mtsca.size() ) {
       uint16_t array[mtsca.front()[1]];
-      NVIC_DISABLE_IRQ(IRQ_SPI0);
       mtsca.pop_front(array,sizeof(array)/2 );
-      NVIC_ENABLE_IRQ(IRQ_SPI0);
       if ( array[0] == 0x9254 || array[0] == 0x9253 ) {
         uint16_t checksum = 0, buf_pos = 0; AsyncMST info; info.packetID = array[4];
         for ( uint16_t i = 0; i < array[1] - 1; i++ ) checksum ^= array[i];
