@@ -36,7 +36,6 @@
 #ifndef CIRCULAR_BUFFER_H
 #define CIRCULAR_BUFFER_H
 #include <algorithm>
-#include <typeinfo> 
 
 template<typename T, uint16_t _size, uint16_t multi = 0>
 class Circular_Buffer {
