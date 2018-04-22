@@ -35,11 +35,11 @@
 #define _SPI_MSTransfer_H_
 
 #ifndef SPI_MST_DATA_BUFFER_MAX
-#define SPI_MST_DATA_BUFFER_MAX 300
+#define SPI_MST_DATA_BUFFER_MAX 250
 #endif
 
 #ifndef SPI_MST_QUEUE_SLOTS
-#define SPI_MST_QUEUE_SLOTS 32
+#define SPI_MST_QUEUE_SLOTS 8
 #endif
 
 #include "Stream.h"
